@@ -1,10 +1,12 @@
 import { create } from 'zustand';
-import { VideoProject, ClipSegment, TranscriptSegment, ExportOptions } from '../types';
+import { VideoProject, ClipSegment, TranscriptSegment, ExportOptions, User } from '../types';
+import { checkUsageLimits, updateUsage } from '../lib/usage';
 
 interface AppState {
-  // Current user state
+  // User state
   isAuthenticated: boolean;
-  user: { id: string; name: string } | null;
+  user: User | null;
+  setUser: (user: User | null) => void;
   
   // Project data
   projects: VideoProject[];
@@ -48,6 +50,15 @@ interface AppState {
   // Upload and transcribe methods
   setUploadState: (isUploading: boolean, progress?: number) => void;
   setTranscribeState: (isTranscribing: boolean, progress?: number) => void;
+
+  // Usage tracking
+  updateUserUsage: (type: 'clip' | 'export' | 'storage', value: number) => Promise<void>;
+  checkUserLimits: () => {
+    canCreateClips: boolean;
+    canExport: boolean;
+    canUpload: boolean;
+    nearLimit: boolean;
+  } | null;
 }
 
 // Default export options
@@ -68,10 +79,10 @@ const defaultExportOptions: ExportOptions = {
   },
 };
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
-  isAuthenticated: true, // Mock authenticated state
-  user: { id: '1', name: 'Demo User' },
+  isAuthenticated: false,
+  user: null,
   projects: [],
   currentProject: null,
   clipSegments: [],
@@ -86,6 +97,12 @@ export const useAppStore = create<AppState>((set) => ({
   uploadProgress: 0,
   isTranscribing: false,
   transcribeProgress: 0,
+  
+  // User methods
+  setUser: (user) => set({ 
+    user,
+    isAuthenticated: !!user
+  }),
   
   // Methods
   setCurrentProject: (project) => set({ currentProject: project }),
@@ -145,4 +162,23 @@ export const useAppStore = create<AppState>((set) => ({
     isTranscribing, 
     transcribeProgress: isTranscribing ? progress : 0 
   }),
+
+  // Usage tracking methods
+  updateUserUsage: async (type, value) => {
+    const { user } = get();
+    if (!user) return;
+
+    try {
+      const updatedUsage = await updateUsage(user.id, type, value);
+      set({ user: { ...user, usage: updatedUsage } });
+    } catch (error) {
+      console.error('Failed to update usage:', error);
+    }
+  },
+
+  checkUserLimits: () => {
+    const { user } = get();
+    if (!user) return null;
+    return checkUsageLimits(user);
+  },
 }));

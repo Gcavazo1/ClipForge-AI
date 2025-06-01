@@ -1,12 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Italic as Crystal, TrendingUp, Clock, Calendar, Hash, Star, Sparkles, AlertCircle } from 'lucide-react';
+import { 
+  Italic as Crystal, 
+  TrendingUp, 
+  Clock, 
+  Calendar, 
+  Hash, 
+  Star, 
+  Sparkles, 
+  AlertCircle,
+  LineChart
+} from 'lucide-react';
 import Button from '../components/ui/button';
+import FeedbackPanel from '../components/prophecy/FeedbackPanel';
 import { useAppStore } from '../store';
 import { supabase } from '../lib/supabase';
 import { getProphecy } from '../lib/prophecy';
+import { getFeedbackSummary } from '../lib/feedback';
 import { formatNumber } from '../lib/utils';
 import { Toast, ToastTitle, ToastDescription } from '../components/ui/toast';
+import { FeedbackSummary } from '../types';
 
 interface Prophecy {
   predictedViews: number;
@@ -20,6 +33,7 @@ interface Prophecy {
 
 const ProphecyPage: React.FC = () => {
   const [prophecy, setProphecy] = useState<Prophecy | null>(null);
+  const [feedbackSummary, setFeedbackSummary] = useState<FeedbackSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
@@ -31,6 +45,7 @@ const ProphecyPage: React.FC = () => {
   useEffect(() => {
     if (user && currentProject) {
       generateProphecy();
+      loadFeedbackSummary();
     }
   }, [user, currentProject]);
 
@@ -55,6 +70,21 @@ const ProphecyPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const loadFeedbackSummary = async () => {
+    if (!user) return;
+
+    try {
+      const summary = await getFeedbackSummary(user.id);
+      setFeedbackSummary(summary);
+    } catch (err) {
+      console.error('Error loading feedback summary:', err);
+    }
+  };
+
+  const handleFeedbackSubmit = () => {
+    loadFeedbackSummary(); // Refresh feedback summary after new submission
   };
 
   if (isLoading) {
@@ -99,7 +129,7 @@ const ProphecyPage: React.FC = () => {
       </div>
 
       {prophecy && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Predictions Panel */}
           <div className="bg-background-light rounded-lg p-6 space-y-6">
             <div className="flex items-center justify-between">
@@ -127,11 +157,16 @@ const ProphecyPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-background-lighter">
-              <div className="text-sm text-foreground-muted">
-                Based on your historical performance and current trends
+            {feedbackSummary && (
+              <div className="pt-4 border-t border-background-lighter">
+                <div className="flex items-center justify-between text-sm text-foreground-muted">
+                  <span>Prediction Accuracy</span>
+                  <span className="font-medium">
+                    {feedbackSummary.accuracyTrend[feedbackSummary.accuracyTrend.length - 1]?.accuracy.toFixed(1)}%
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Timing Panel */}
@@ -156,37 +191,40 @@ const ProphecyPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-background-lighter">
-              <div className="text-sm text-foreground-muted">
-                Timing recommendations based on audience activity patterns
+            {feedbackSummary && (
+              <div className="pt-4 border-t border-background-lighter">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-foreground-muted">Recommendation Follow Rate</span>
+                  <span className="font-medium">
+                    {feedbackSummary.recommendationFollowRate.toFixed(1)}%
+                  </span>
+                </div>
               </div>
+            )}
+          </div>
+
+          {/* Feedback Panel */}
+          <FeedbackPanel
+            prophecyId={currentProject?.id || ''}
+            prophecy={prophecy}
+            onFeedbackSubmit={handleFeedbackSubmit}
+          />
+        </div>
+      )}
+
+      {/* Feedback Summary */}
+      {feedbackSummary && feedbackSummary.accuracyTrend.length > 0 && (
+        <div className="mt-8 bg-background-light rounded-lg p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-medium">Prediction Accuracy Trend</h2>
+            <div className="flex items-center text-sm text-foreground-muted">
+              <LineChart size={16} className="mr-2" />
+              Based on {feedbackSummary.totalFeedback} predictions
             </div>
           </div>
 
-          {/* Trending Topics */}
-          <div className="bg-background-light rounded-lg p-6 space-y-6">
-            <h2 className="text-lg font-medium">Trending Topics</h2>
-
-            <div className="flex flex-wrap gap-2">
-              {prophecy.trendingHashtags.map((tag, index) => (
-                <div
-                  key={index}
-                  className="bg-primary-500/10 text-primary-400 px-3 py-1 rounded-full text-sm"
-                >
-                  <Hash size={14} className="inline mr-1" />
-                  {tag}
-                </div>
-              ))}
-            </div>
-
-            <div className="space-y-3">
-              {prophecy.recommendations.map((rec, index) => (
-                <div key={index} className="flex items-start gap-2 text-sm">
-                  <Sparkles size={16} className="text-primary-500 mt-1 shrink-0" />
-                  <p>{rec}</p>
-                </div>
-              ))}
-            </div>
+          <div className="h-64">
+            {/* Add a chart here using recharts to show accuracyTrend data */}
           </div>
         </div>
       )}

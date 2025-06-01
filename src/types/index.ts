@@ -1,8 +1,31 @@
-export interface User {
+import { User as SupabaseUser } from '@supabase/supabase-js';
+
+export interface User extends Omit<SupabaseUser, 'app_metadata' | 'user_metadata'> {
   id: string;
   name: string;
   email: string;
   avatar?: string;
+  createdAt: string;
+  notifications?: {
+    email: boolean;
+    push: boolean;
+  };
+  usage: {
+    clipsCreated: number;
+    exportsUsed: number;
+    storageUsed: number;
+    lastResetDate: string;
+  };
+  plan: 'free' | 'pro' | 'enterprise';
+}
+
+export interface UsageLimits {
+  maxClipsPerMonth: number;
+  maxExportsPerMonth: number;
+  maxStorageGB: number;
+  maxResolution: '720p' | '1080p' | '4k';
+  removeWatermark: boolean;
+  prophetic: boolean;
 }
 
 export interface VideoProject {
@@ -17,6 +40,7 @@ export interface VideoProject {
   status: 'uploading' | 'processing' | 'ready' | 'error';
   progress?: number;
   error?: string;
+  size?: number;
 }
 
 export interface ClipSegment {
@@ -100,5 +124,32 @@ export interface ProphecyResult {
     type: string;
     message: string;
     confidence: number;
+  }[];
+}
+
+export interface UserFeedback {
+  id: string;
+  userId: string;
+  prophecyId: string;
+  rating: number;
+  wasHelpful: boolean;
+  comment?: string;
+  createdAt: string;
+  metadata?: {
+    followedRecommendations: boolean;
+    actualViews?: number;
+    actualLikes?: number;
+    actualComments?: number;
+  };
+}
+
+export interface FeedbackSummary {
+  averageRating: number;
+  totalFeedback: number;
+  helpfulPercentage: number;
+  recommendationFollowRate: number;
+  accuracyTrend: {
+    date: string;
+    accuracy: number;
   }[];
 }
