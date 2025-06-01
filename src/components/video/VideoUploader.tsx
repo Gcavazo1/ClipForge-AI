@@ -4,7 +4,8 @@ import { Upload, Film, AlertCircle, Check } from 'lucide-react';
 import Button from '../ui/button';
 import Progress from '../ui/progress';
 import { VideoProject } from '../../types';
-import { generateId, transcribeVideo } from '../../lib/utils';
+import { generateId } from '../../lib/utils';
+import { transcribeAndHighlight } from '../../lib/transcribeAndHighlight';
 import { useAppStore } from '../../store';
 
 interface VideoUploaderProps {
@@ -101,8 +102,8 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
             });
           }, 200);
           
-          // Get transcript
-          const transcript = await transcribeVideo(file);
+          // Get transcript using the correct function
+          const { transcript } = await transcribeAndHighlight(file);
           setTranscript(transcript);
           
           clearInterval(transcribeInterval);
