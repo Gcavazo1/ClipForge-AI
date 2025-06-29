@@ -5,7 +5,7 @@ import { VideoProject } from '../../types';
 import { formatLongTime, formatDate, isValidUrl } from '../../lib/utils';
 import Button from '../ui/button';
 import Progress from '../ui/progress';
-import { logger } from '../../lib/logger';
+import { logger } from '../../logger';
 
 interface ProjectCardProps {
   project: VideoProject;
