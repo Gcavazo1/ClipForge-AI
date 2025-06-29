@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, Film, AlertCircle, Check, Clock, Zap } from 'lucide-react';
+import { Upload, Film, AlertCircle, Check, Clock, Zap, Wifi, WifiOff } from 'lucide-react';
 import Button from '../ui/button';
 import Progress from '../ui/progress';
 import { VideoProject } from '../../types';
@@ -20,6 +20,7 @@ interface ProcessingStage {
   progress: number;
   status: 'pending' | 'active' | 'completed' | 'error';
   icon: React.ReactNode;
+  error?: string;
 }
 
 const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
@@ -29,6 +30,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
   const [currentProject, setCurrentProject] = useState<VideoProject | null>(null);
   const [processingStages, setProcessingStages] = useState<ProcessingStage[]>([]);
   const [estimatedTime, setEstimatedTime] = useState<number | null>(null);
+  const [serviceStatus, setServiceStatus] = useState<any>(null);
   
   const user = useAppStore((state) => state.user);
   const isUploading = useAppStore((state) => state.isUploading);
@@ -56,7 +58,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
       icon: <Zap size={16} />
     },
     {
-      name: 'Transcribing content',
+      name: 'AI transcription',
       progress: 0,
       status: 'pending',
       icon: <Clock size={16} />
@@ -69,10 +71,34 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
     }
   ];
 
-  const updateStage = (stageIndex: number, progress: number, status?: ProcessingStage['status']) => {
+  // Check AI service status on component mount
+  React.useEffect(() => {
+    const checkServiceStatus = async () => {
+      try {
+        const status = AIServiceIntegration.getServiceStatus();
+        setServiceStatus(status);
+        
+        if (!status.available) {
+          setError('AI services are not available. Please check your API key configuration.');
+        }
+      } catch (error) {
+        logger.error('Failed to check AI service status', error as Error);
+        setError('Unable to verify AI service status. Please try again.');
+      }
+    };
+
+    checkServiceStatus();
+  }, []);
+
+  const updateStage = (stageIndex: number, progress: number, status?: ProcessingStage['status'], error?: string) => {
     setProcessingStages(prev => prev.map((stage, index) => 
       index === stageIndex 
-        ? { ...stage, progress, status: status || (progress === 100 ? 'completed' : 'active') }
+        ? { 
+            ...stage, 
+            progress, 
+            status: status || (progress === 100 ? 'completed' : 'active'),
+            error 
+          }
         : stage
     ));
   };
@@ -80,6 +106,12 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
   const handleUpload = useCallback(async (file: File) => {
     if (!user) {
       setError('Please sign in to upload videos');
+      return;
+    }
+
+    // Check AI service availability
+    if (!serviceStatus?.available) {
+      setError('AI services are not available. Please check your API key configuration and try again.');
       return;
     }
 
@@ -152,68 +184,95 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
 
       setCurrentProject(updatedProject);
 
-      // Stage 3: AI Processing Pipeline
+      // Stage 3: AI Processing Pipeline with comprehensive error handling
       updateStage(2, 0, 'active');
       setTranscribeState(true, 0);
 
-      const aiResult = await AIServiceIntegration.processVideoWithAI(
-        {
+      try {
+        const aiResult = await AIServiceIntegration.processVideoWithAI(
+          {
+            projectId: updatedProject.id,
+            videoFile: file,
+            userId: user.id,
+            options: {
+              transcriptionProvider: 'openai',
+              analysisProvider: 'groq',
+              language: 'en',
+              generateHighlights: true,
+              autoCreateClips: true
+            }
+          },
+          (stage, progress) => {
+            // Map AI stages to our processing stages
+            switch (stage) {
+              case 'Extracting audio':
+                updateStage(2, progress);
+                break;
+              case 'Transcribing audio':
+              case 'Processing transcription':
+                updateStage(3, progress);
+                break;
+              case 'Analyzing highlights':
+              case 'Creating highlight clips':
+                updateStage(4, progress);
+                break;
+            }
+            setTranscribeState(true, progress);
+          }
+        );
+
+        // Complete all stages
+        updateStage(2, 100, 'completed');
+        updateStage(3, 100, 'completed');
+        updateStage(4, 100, 'completed');
+        setTranscribeState(false);
+
+        // Final project update
+        const finalProject = await VideoProjectService.updateStatus(
+          updatedProject.id,
+          'ready',
+          100
+        );
+
+        logger.info('Video upload and processing completed', {
           projectId: updatedProject.id,
-          videoFile: file,
-          userId: user.id,
-          options: {
-            transcriptionProvider: 'openai',
-            analysisProvider: 'groq',
-            language: 'en',
-            generateHighlights: true,
-            autoCreateClips: true
-          }
-        },
-        (stage, progress) => {
-          // Map AI stages to our processing stages
-          switch (stage) {
-            case 'Extracting audio':
-              updateStage(2, progress);
-              break;
-            case 'Transcribing audio':
-            case 'Processing transcription':
-              updateStage(3, progress);
-              break;
-            case 'Analyzing highlights':
-            case 'Creating highlight clips':
-              updateStage(4, progress);
-              break;
-          }
-          setTranscribeState(true, progress);
+          transcriptSegments: aiResult.transcript.length,
+          highlights: aiResult.highlights.length,
+          processingTime: aiResult.processingTime
+        });
+
+        // Call completion callback
+        onUploadComplete({
+          ...updatedProject,
+          status: 'ready',
+          progress: 100
+        });
+
+      } catch (aiError) {
+        logger.error('AI processing failed', aiError as Error);
+        
+        // Update the failed stage with specific error
+        const activeStageIndex = processingStages.findIndex(s => s.status === 'active');
+        if (activeStageIndex >= 0) {
+          updateStage(activeStageIndex, 0, 'error', (aiError as Error).message);
         }
-      );
+        
+        // Update project status but don't fail completely - user can still use basic features
+        await VideoProjectService.updateStatus(
+          updatedProject.id,
+          'ready', // Mark as ready even without AI features
+          100,
+          `AI processing failed: ${(aiError as Error).message}`
+        );
 
-      // Complete all stages
-      updateStage(2, 100, 'completed');
-      updateStage(3, 100, 'completed');
-      updateStage(4, 100, 'completed');
-      setTranscribeState(false);
-
-      // Final project update
-      const finalProject = await VideoProjectService.updateStatus(
-        updatedProject.id,
-        'ready',
-        100
-      );
-
-      logger.info('Video upload and processing completed', {
-        projectId: updatedProject.id,
-        transcriptSegments: aiResult.transcript.length,
-        highlights: aiResult.highlights.length,
-        processingTime: aiResult.processingTime
-      });
-
-      // Call completion callback
-      onUploadComplete({
-        ...updatedProject,
-        status: 'ready',
-        progress: 100
-      });
+        // Still call completion callback so user can access the video
+        onUploadComplete({
+          ...updatedProject,
+          status: 'ready',
+          progress: 100,
+          error: `AI processing failed: ${(aiError as Error).message}`
+        });
+      }
 
       // Reset states
       setUploadState(false);
@@ -225,10 +284,10 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
       // Update failed stage
       const activeStageIndex = processingStages.findIndex(s => s.status === 'active');
       if (activeStageIndex >= 0) {
-        updateStage(activeStageIndex, 0, 'error');
+        updateStage(activeStageIndex, 0, 'error', (uploadError as Error).message);
       }
       
-      setError('Upload and processing failed. Please try again.');
+      setError(`Upload failed: ${(uploadError as Error).message}`);
       setUploadState(false);
       setTranscribeState(false);
 
@@ -242,7 +301,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
         );
       }
     }
-  }, [user, onUploadComplete, setUploadState, setTranscribeState, processingStages, currentProject]);
+  }, [user, onUploadComplete, setUploadState, setTranscribeState, processingStages, currentProject, serviceStatus]);
   
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => {
@@ -277,6 +336,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
   if (isUploading || isTranscribing) {
     const activeStage = processingStages.find(s => s.status === 'active');
     const completedStages = processingStages.filter(s => s.status === 'completed').length;
+    const errorStages = processingStages.filter(s => s.status === 'error').length;
     const totalProgress = (completedStages / processingStages.length) * 100;
 
     return (
@@ -303,7 +363,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
         
         <Progress 
           value={totalProgress}
-          variant="primary"
+          variant={errorStages > 0 ? "error" : "primary"}
           size="md"
           className="mb-4"
         />
@@ -351,6 +411,10 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
                     className="mt-1"
                   />
                 )}
+                
+                {stage.status === 'error' && stage.error && (
+                  <p className="text-xs text-error-500 mt-1">{stage.error}</p>
+                )}
               </div>
             </div>
           ))}
@@ -361,36 +425,66 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
             {activeStage.name}...
           </p>
         )}
+
+        {errorStages > 0 && (
+          <div className="mt-4 p-3 bg-warning-900/20 text-warning-500 rounded-md text-sm">
+            <p className="font-medium">Some AI features may not be available</p>
+            <p>Your video has been uploaded successfully, but some AI processing failed. You can still edit and export your video manually.</p>
+          </div>
+        )}
       </div>
     );
   }
   
   return (
-    <div 
-      {...getRootProps()} 
-      className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-        isDragActive ? 'border-primary-500 bg-primary-500/10' : 'border-gray-600 hover:border-primary-400 hover:bg-background-lighter'
-      }`}
-    >
-      <input {...getInputProps()} />
-      <Film size={40} className={`mx-auto mb-4 ${isDragActive ? 'text-primary-400' : 'text-foreground-muted'}`} />
-      <p className="text-lg font-medium mb-2">Upload your video</p>
-      <p className="text-sm text-foreground-muted mb-4">
-        Drag & drop a video file here, or click to select
-      </p>
-      <Button variant="outline" size="sm" icon={<Upload size={16} />}>
-        Select Video
-      </Button>
-      <p className="text-xs text-foreground-muted mt-4">
-        Supported formats: MP4, MOV, AVI, WebM (max 500MB)
-      </p>
-      
-      {error && (
-        <div className="mt-4 text-sm text-error-500 flex items-center justify-center">
-          <AlertCircle size={16} className="mr-1" />
-          {error}
+    <div className="space-y-4">
+      {/* AI Service Status Indicator */}
+      {serviceStatus && (
+        <div className={`flex items-center justify-center p-2 rounded-md text-sm ${
+          serviceStatus.available 
+            ? 'bg-success-900/20 text-success-500' 
+            : 'bg-error-900/20 text-error-500'
+        }`}>
+          {serviceStatus.available ? (
+            <>
+              <Wifi size={16} className="mr-2" />
+              AI services ready ({serviceStatus.providers.length} providers available)
+            </>
+          ) : (
+            <>
+              <WifiOff size={16} className="mr-2" />
+              AI services unavailable - check API keys
+            </>
+          )}
         </div>
       )}
+
+      <div 
+        {...getRootProps()} 
+        className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+          isDragActive ? 'border-primary-500 bg-primary-500/10' : 'border-gray-600 hover:border-primary-400 hover:bg-background-lighter'
+        }`}
+      >
+        <input {...getInputProps()} />
+        <Film size={40} className={`mx-auto mb-4 ${isDragActive ? 'text-primary-400' : 'text-foreground-muted'}`} />
+        <p className="text-lg font-medium mb-2">Upload your video</p>
+        <p className="text-sm text-foreground-muted mb-4">
+          Drag & drop a video file here, or click to select
+        </p>
+        <Button variant="outline" size="sm" icon={<Upload size={16} />}>
+          Select Video
+        </Button>
+        <p className="text-xs text-foreground-muted mt-4">
+          Supported formats: MP4, MOV, AVI, WebM (max 500MB)
+        </p>
+        
+        {error && (
+          <div className="mt-4 text-sm text-error-500 flex items-center justify-center">
+            <AlertCircle size={16} className="mr-1" />
+            {error}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

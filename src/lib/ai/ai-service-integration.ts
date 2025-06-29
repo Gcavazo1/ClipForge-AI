@@ -26,7 +26,7 @@ export interface PipelineResult {
 }
 
 export class AIServiceIntegration {
-  // Main processing pipeline
+  // Main processing pipeline with comprehensive error handling
   static async processVideoWithAI(
     pipeline: ProcessingPipeline,
     onProgress?: (stage: string, progress: number) => void
@@ -40,17 +40,37 @@ export class AIServiceIntegration {
         options: pipeline.options
       });
 
+      // Check if AI services are available
+      const serviceStatus = AIServiceIntegration.getServiceStatus();
+      if (!serviceStatus.available) {
+        throw new Error('No AI services are currently available. Please check your API keys.');
+      }
+
       // Stage 1: Extract audio from video (10%)
       onProgress?.('Extracting audio', 10);
-      const audioFile = await VideoProcessingService.extractAudio(pipeline.videoFile);
+      let audioFile: File;
+      
+      try {
+        audioFile = await VideoProcessingService.extractAudio(pipeline.videoFile);
+      } catch (error) {
+        logger.error('Audio extraction failed', error as Error);
+        throw new Error('Failed to extract audio from video. Please ensure the video file is valid.');
+      }
 
-      // Stage 2: Transcribe audio (60%)
+      // Stage 2: Transcribe audio with fallback providers (60%)
       onProgress?.('Transcribing audio', 20);
-      const transcriptionResult = await aiService.transcribe(audioFile, {
-        language: pipeline.options?.language || 'en',
-        speakerDiarization: true,
-        wordTimestamps: true
-      }, pipeline.options?.transcriptionProvider);
+      let transcriptionResult;
+      
+      try {
+        transcriptionResult = await this.transcribeWithFallback(audioFile, {
+          language: pipeline.options?.language || 'en',
+          speakerDiarization: true,
+          wordTimestamps: true
+        }, pipeline.options?.transcriptionProvider);
+      } catch (error) {
+        logger.error('All transcription services failed', error as Error);
+        throw new Error('Transcription failed. Please try again or contact support if the issue persists.');
+      }
 
       onProgress?.('Processing transcription', 60);
 
@@ -67,7 +87,15 @@ export class AIServiceIntegration {
 
       // Stage 3: Save transcript to database
       onProgress?.('Saving transcript', 70);
-      const savedTranscript = await TranscriptSegmentService.createBatch(transcript);
+      let savedTranscript: TranscriptSegment[];
+      
+      try {
+        savedTranscript = await TranscriptSegmentService.createBatch(transcript);
+      } catch (error) {
+        logger.error('Failed to save transcript', error as Error);
+        // Continue with in-memory transcript if database save fails
+        savedTranscript = transcript;
+      }
 
       let highlights: ClipSegment[] = [];
       
@@ -75,39 +103,50 @@ export class AIServiceIntegration {
       if (pipeline.options?.generateHighlights !== false) {
         onProgress?.('Analyzing highlights', 80);
         
-        const highlightAnalysis = await aiService.detectHighlights(
-          transcriptionResult,
-          {
-            platform: 'general',
-            targetDuration: 30,
-            contentType: 'general'
-          },
-          pipeline.options?.analysisProvider
-        );
+        try {
+          const highlightAnalysis = await this.detectHighlightsWithFallback(
+            transcriptionResult,
+            {
+              platform: 'general',
+              targetDuration: 30,
+              contentType: 'general'
+            },
+            pipeline.options?.analysisProvider
+          );
 
-        onProgress?.('Creating highlight clips', 90);
+          onProgress?.('Creating highlight clips', 90);
 
-        // Convert highlights to clip segments
-        const highlightClips = highlightAnalysis.highlights.map(highlight => ({
-          id: generateId(),
-          projectId: pipeline.projectId,
-          title: highlight.summary.slice(0, 50) + (highlight.summary.length > 50 ? '...' : ''),
-          startTime: highlight.startTime,
-          endTime: highlight.endTime,
-          isHighlight: true,
-          confidence: highlight.confidence,
-          type: 'ai_suggested' as const,
-          summary: highlight.summary
-        }));
+          // Convert highlights to clip segments
+          const highlightClips = highlightAnalysis.highlights.map(highlight => ({
+            id: generateId(),
+            projectId: pipeline.projectId,
+            title: highlight.summary.slice(0, 50) + (highlight.summary.length > 50 ? '...' : ''),
+            startTime: highlight.startTime,
+            endTime: highlight.endTime,
+            isHighlight: true,
+            confidence: highlight.confidence,
+            type: 'ai_suggested' as const,
+            summary: highlight.summary
+          }));
 
-        // Save highlights to database if auto-create is enabled
-        if (pipeline.options?.autoCreateClips !== false && highlightClips.length > 0) {
-          for (const clip of highlightClips) {
-            const savedClip = await ClipSegmentService.create(clip);
-            highlights.push(savedClip);
+          // Save highlights to database if auto-create is enabled
+          if (pipeline.options?.autoCreateClips !== false && highlightClips.length > 0) {
+            try {
+              for (const clip of highlightClips) {
+                const savedClip = await ClipSegmentService.create(clip);
+                highlights.push(savedClip);
+              }
+            } catch (error) {
+              logger.error('Failed to save highlights to database', error as Error);
+              // Continue with in-memory highlights
+              highlights = highlightClips;
+            }
+          } else {
+            highlights = highlightClips;
           }
-        } else {
-          highlights = highlightClips;
+        } catch (error) {
+          logger.warn('Highlight detection failed, continuing without highlights', error as Error);
+          // Continue without highlights rather than failing the entire process
         }
       }
 
@@ -139,6 +178,98 @@ export class AIServiceIntegration {
       });
       throw error;
     }
+  }
+
+  // Transcription with automatic fallback between providers
+  private static async transcribeWithFallback(
+    audioFile: File,
+    options: any,
+    preferredProvider?: string
+  ): Promise<any> {
+    const providers = ['openai', 'assembly', 'groq'].filter(p => 
+      aiService.getAvailableProviders().some(provider => provider.name.toLowerCase() === p)
+    );
+
+    // Put preferred provider first
+    if (preferredProvider && providers.includes(preferredProvider)) {
+      const index = providers.indexOf(preferredProvider);
+      providers.splice(index, 1);
+      providers.unshift(preferredProvider);
+    }
+
+    let lastError: Error | null = null;
+
+    for (const provider of providers) {
+      try {
+        logger.info(`Attempting transcription with ${provider}`);
+        const result = await aiService.transcribe(audioFile, options, provider);
+        logger.info(`Transcription successful with ${provider}`);
+        return result;
+      } catch (error) {
+        lastError = error as Error;
+        logger.warn(`Transcription failed with ${provider}`, error as Error);
+        
+        // If this is a quota/billing error, try next provider immediately
+        if (this.isQuotaError(error as Error)) {
+          continue;
+        }
+        
+        // For other errors, wait a bit before trying next provider
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    throw new Error(`All transcription providers failed. Last error: ${lastError?.message}`);
+  }
+
+  // Highlight detection with fallback
+  private static async detectHighlightsWithFallback(
+    transcript: any,
+    options: any,
+    preferredProvider?: string
+  ): Promise<any> {
+    const providers = ['groq', 'openai'].filter(p => 
+      aiService.getAvailableProviders().some(provider => provider.name.toLowerCase() === p)
+    );
+
+    // Put preferred provider first
+    if (preferredProvider && providers.includes(preferredProvider)) {
+      const index = providers.indexOf(preferredProvider);
+      providers.splice(index, 1);
+      providers.unshift(preferredProvider);
+    }
+
+    let lastError: Error | null = null;
+
+    for (const provider of providers) {
+      try {
+        logger.info(`Attempting highlight detection with ${provider}`);
+        const result = await aiService.detectHighlights(transcript, options, provider);
+        logger.info(`Highlight detection successful with ${provider}`);
+        return result;
+      } catch (error) {
+        lastError = error as Error;
+        logger.warn(`Highlight detection failed with ${provider}`, error as Error);
+        
+        if (this.isQuotaError(error as Error)) {
+          continue;
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    throw new Error(`All highlight detection providers failed. Last error: ${lastError?.message}`);
+  }
+
+  // Check if error is related to quota/billing
+  private static isQuotaError(error: Error): boolean {
+    const message = error.message.toLowerCase();
+    return message.includes('quota') || 
+           message.includes('billing') || 
+           message.includes('insufficient') ||
+           message.includes('rate limit') ||
+           message.includes('429');
   }
 
   // Reprocess existing transcript for better highlights
@@ -173,8 +304,8 @@ export class AIServiceIntegration {
         duration: Math.max(...transcript.map(t => t.endTime))
       };
 
-      // Analyze with AI
-      const analysis = await aiService.detectHighlights(transcriptionResult, {
+      // Analyze with AI using fallback
+      const analysis = await this.detectHighlightsWithFallback(transcriptionResult, {
         platform: options?.platform || 'general',
         targetDuration: options?.targetDuration || 30,
         contentType: 'general'
@@ -249,6 +380,50 @@ export class AIServiceIntegration {
       estimatedCost,
       recommendations
     };
+  }
+
+  // Test API connectivity
+  static async testConnectivity(): Promise<{
+    openai: boolean;
+    groq: boolean;
+    assembly: boolean;
+    errors: Record<string, string>;
+  }> {
+    const results = {
+      openai: false,
+      groq: false,
+      assembly: false,
+      errors: {} as Record<string, string>
+    };
+
+    // Test each service with a minimal request
+    const testAudio = new File(['test'], 'test.wav', { type: 'audio/wav' });
+
+    // Test OpenAI
+    try {
+      await aiService.transcribe(testAudio, { language: 'en' }, 'openai');
+      results.openai = true;
+    } catch (error) {
+      results.errors.openai = (error as Error).message;
+    }
+
+    // Test Groq
+    try {
+      await aiService.analyzeText('test text', {}, 'groq');
+      results.groq = true;
+    } catch (error) {
+      results.errors.groq = (error as Error).message;
+    }
+
+    // Test AssemblyAI
+    try {
+      await aiService.transcribe(testAudio, { language: 'en' }, 'assembly');
+      results.assembly = true;
+    } catch (error) {
+      results.errors.assembly = (error as Error).message;
+    }
+
+    return results;
   }
 
   // Batch process multiple videos

@@ -13,6 +13,7 @@ const EditorPage = withLazyLoading(() => import('./pages/EditorPage'), 'Loading 
 const AnalyticsPage = withLazyLoading(() => import('./pages/AnalyticsPage'), 'Loading analytics...');
 const ProphecyPage = withLazyLoading(() => import('./pages/ProphecyPage'), 'Loading prophecy...');
 const PricingPage = withLazyLoading(() => import('./pages/PricingPage'), 'Loading pricing...');
+const SettingsPage = withLazyLoading(() => import('./pages/SettingsPage'), 'Loading settings...');
 const CheckoutSuccessPage = withLazyLoading(() => import('./pages/CheckoutSuccessPage'));
 const CheckoutCancelPage = withLazyLoading(() => import('./pages/CheckoutCancelPage'));
 const NotFoundPage = withLazyLoading(() => import('./pages/NotFoundPage'));
@@ -62,6 +63,7 @@ function App() {
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="prophecy" element={<ProphecyPage />} />
             <Route path="pricing" element={<PricingPage />} />
+            <Route path="settings" element={<SettingsPage />} />
             <Route path="checkout/success" element={<CheckoutSuccessPage />} />
             <Route path="checkout/cancel" element={<CheckoutCancelPage />} />
             <Route path="404" element={<NotFoundPage />} />
