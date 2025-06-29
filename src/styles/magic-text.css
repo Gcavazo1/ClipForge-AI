@@ -1,0 +1,135 @@
+/* Magic Text Animation Styles */
+
+.magic {
+  display: inline-block;
+  position: relative;
+}
+
+.magic-star {
+  --size: clamp(20px, 1.5vw, 30px);
+  
+  animation: magic-scale 700ms ease forwards;
+  display: block;
+  height: var(--size);
+  left: var(--star-left);
+  position: absolute;
+  top: var(--star-top);
+  width: var(--size);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.magic-star > svg {
+  animation: magic-rotate 1000ms linear infinite;
+  display: block;
+  opacity: 0.7;
+  width: 100%;
+  height: 100%;
+}
+
+.magic-star > svg > path {
+  fill: rgb(139, 92, 246); /* primary-500 */
+}
+
+.magic-text {
+  animation: magic-background-pan 3s linear infinite;
+  background: linear-gradient(
+    to right,
+    rgb(123, 31, 162),   /* --purple */
+    rgb(139, 92, 246),   /* primary-500 */
+    rgb(244, 143, 177),  /* --pink */
+    rgb(123, 31, 162)    /* --purple */
+  );
+  background-size: 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  white-space: nowrap;
+  position: relative;
+  z-index: 1;
+}
+
+/* Animations */
+@keyframes magic-background-pan {
+  from {
+    background-position: 0% center;
+  }
+  to {
+    background-position: -200% center;
+  }
+}
+
+@keyframes magic-scale {
+  from, to {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1);
+  }
+}
+
+@keyframes magic-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(180deg);
+  }
+}
+
+/* Hover effect variant */
+.magic-hover .magic-star {
+  animation: none;
+  transform: scale(0);
+}
+
+.magic-hover:hover .magic-star {
+  animation: magic-scale 700ms ease forwards;
+}
+
+.magic-hover:hover .magic-star:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.magic-hover:hover .magic-star:nth-child(2) {
+  animation-delay: 300ms;
+}
+
+.magic-hover:hover .magic-star:nth-child(3) {
+  animation-delay: 600ms;
+}
+
+/* Dark theme adjustments */
+.dark .magic-star > svg > path {
+  fill: rgb(168, 85, 247); /* primary-400 for dark mode */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .magic-star {
+    --size: clamp(16px, 3vw, 24px);
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .magic-star {
+    animation: none;
+  }
+  
+  .magic-star > svg {
+    animation: none;
+  }
+  
+  .magic-text {
+    animation: none;
+    background: linear-gradient(
+      to right,
+      rgb(139, 92, 246),
+      rgb(168, 85, 247)
+    );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}

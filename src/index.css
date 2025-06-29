@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import magic text styles */
+@import './styles/magic-text.css';
+
 @layer base {
   body {
     @apply antialiased;

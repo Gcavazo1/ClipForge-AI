@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import Button from '../components/ui/button';
+import MagicText from '../components/ui/magic-text';
 import { STRIPE_PRODUCTS } from '../stripe-config';
 import { createCheckoutSession } from '../lib/stripe';
 import { useAppStore } from '../store';
@@ -40,9 +41,11 @@ const PricingPage: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto py-16 px-4">
       <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold mb-4">Choose Your Plan</h1>
+        <h1 className="text-4xl font-bold mb-4">
+          Choose Your <MagicText>Perfect Plan</MagicText>
+        </h1>
         <p className="text-foreground-muted max-w-2xl mx-auto">
-          Select the perfect plan for your content creation needs
+          Select the perfect plan for your content creation needs and unlock the full power of AI-driven video editing
         </p>
       </div>
 
@@ -50,10 +53,28 @@ const PricingPage: React.FC = () => {
         {Object.entries(STRIPE_PRODUCTS).map(([key, product]) => (
           <div
             key={product.id}
-            className="bg-background-light rounded-lg p-6 border-2 border-background-lighter hover:border-primary-500 transition-colors"
+            className={`bg-background-light rounded-lg p-6 border-2 transition-all duration-300 hover:scale-105 ${
+              key === 'PRO' 
+                ? 'border-primary-500 shadow-lg shadow-primary-500/20' 
+                : 'border-background-lighter hover:border-primary-500'
+            }`}
           >
+            {key === 'PRO' && (
+              <div className="text-center mb-4">
+                <span className="bg-primary-500 text-white px-3 py-1 rounded-full text-sm font-medium">
+                  Most Popular
+                </span>
+              </div>
+            )}
+
             <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold mb-2">{product.name}</h2>
+              <h2 className="text-2xl font-bold mb-2">
+                {key === 'PRO' ? (
+                  <MagicText>{product.name}</MagicText>
+                ) : (
+                  product.name
+                )}
+              </h2>
               <p className="text-foreground-muted mb-4">{product.description}</p>
               <div className="text-3xl font-bold">
                 {key === 'FREE' ? (
@@ -70,7 +91,7 @@ const PricingPage: React.FC = () => {
               {product.features.map((feature, index) => (
                 <div key={index} className="flex items-start gap-2">
                   <CheckCircle2 size={18} className="text-primary-500 mt-0.5 shrink-0" />
-                  <span>{feature}</span>
+                  <span className="text-sm">{feature}</span>
                 </div>
               ))}
             </div>
@@ -94,6 +115,45 @@ const PricingPage: React.FC = () => {
             </Button>
           </div>
         ))}
+      </div>
+
+      {/* Feature Comparison */}
+      <div className="mt-16 bg-background-light rounded-lg p-8">
+        <h3 className="text-2xl font-bold text-center mb-8">
+          Why Choose <MagicText>ClipForge Pro</MagicText>?
+        </h3>
+        
+        <div className="grid md:grid-cols-3 gap-8">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-primary-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-2xl">🚀</span>
+            </div>
+            <h4 className="font-semibold mb-2">Unlimited Creation</h4>
+            <p className="text-sm text-foreground-muted">
+              Create unlimited clips without monthly restrictions. Perfect for content creators and businesses.
+            </p>
+          </div>
+          
+          <div className="text-center">
+            <div className="w-16 h-16 bg-primary-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-2xl">🎯</span>
+            </div>
+            <h4 className="font-semibold mb-2">Prophetic Mode</h4>
+            <p className="text-sm text-foreground-muted">
+              AI-powered predictions to optimize your content strategy and maximize engagement.
+            </p>
+          </div>
+          
+          <div className="text-center">
+            <div className="w-16 h-16 bg-primary-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-2xl">💎</span>
+            </div>
+            <h4 className="font-semibold mb-2">Premium Quality</h4>
+            <p className="text-sm text-foreground-muted">
+              Export in 1080p resolution with no watermarks for professional-grade content.
+            </p>
+          </div>
+        </div>
       </div>
 
       {showToast && error && (
