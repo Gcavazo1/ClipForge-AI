@@ -262,11 +262,32 @@ export class VideoUploadService {
       // Generate thumbnail if requested
       let thumbnailUrl: string | undefined;
       if (task.options.generateThumbnail) {
-        thumbnailUrl = await this.generateAndUploadThumbnail(
-          task.file,
-          task.userId,
-          task.options.thumbnailTimestamp || 1
-        );
+        try {
+          // Extract a frame from the video
+          const thumbnailBlob = await VideoMetadataExtractor.extractFrame(
+            task.file,
+            task.options.thumbnailTimestamp || 1
+          );
+          
+          // Convert blob to file
+          const thumbnailFile = new File(
+            [thumbnailBlob], 
+            `thumbnail-${project.id}.jpg`, 
+            { type: 'image/jpeg' }
+          );
+          
+          // Upload thumbnail
+          const result = await StorageService.uploadThumbnail(thumbnailFile, task.userId);
+          thumbnailUrl = result.publicUrl;
+          
+          logger.info('Thumbnail generated and uploaded', { 
+            projectId: project.id,
+            thumbnailUrl
+          });
+        } catch (thumbnailError) {
+          logger.warn('Failed to generate thumbnail', thumbnailError as Error);
+          // Continue without thumbnail
+        }
       }
       
       // Update task status
@@ -338,24 +359,6 @@ export class VideoUploadService {
         return VideoProjectService.create(project);
       }
     );
-  }
-
-  /**
-   * Generate and upload thumbnail
-   */
-  private async generateAndUploadThumbnail(
-    file: File,
-    userId: string,
-    timestamp: number
-  ): Promise<string | undefined> {
-    try {
-      const thumbnailFile = await StorageService.generateThumbnail(file, timestamp);
-      const result = await StorageService.uploadThumbnail(thumbnailFile, userId);
-      return result.publicUrl;
-    } catch (error) {
-      logger.warn('Thumbnail generation failed', error as Error);
-      return undefined;
-    }
   }
 
   /**

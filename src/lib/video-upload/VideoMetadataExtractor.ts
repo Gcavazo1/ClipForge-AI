@@ -154,7 +154,7 @@ export class VideoMetadataExtractor {
           video.addEventListener('loadeddata', () => {
             try {
               // Seek to timestamp
-              video.currentTime = Math.min(timestamp, video.duration - 0.1);
+              video.currentTime = Math.min(timestamp, Math.max(0, video.duration - 0.1));
             } catch (error) {
               URL.revokeObjectURL(url);
               reject(error);

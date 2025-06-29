@@ -8,11 +8,12 @@ import ClipControls from '../components/video/ClipControls';
 import CaptionSettings from '../components/video/CaptionSettings';
 import { useAppStore } from '../store';
 import { Toast, ToastTitle, ToastDescription } from '../components/ui/toast';
-import { ClipSegment, ExportOptions } from '../types';
+import { ClipSegment, VideoProject } from '../types';
 import { mockProjects, mockTranscript, mockClipSegments } from '../lib/mockData';
 import { detectHighlights } from '../lib/utils';
 import { renderCaptionsOverlay } from '../lib/renderCaptionsOverlay';
 import { logger } from '../lib/logger';
+import { VideoProjectService } from '../lib/database';
 
 const EditorPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -28,6 +29,7 @@ const EditorPage: React.FC = () => {
   const selectedClipId = useAppStore((state) => state.selectedClipId);
   const isPlaying = useAppStore((state) => state.isPlaying);
   const exportOptions = useAppStore((state) => state.exportOptions);
+  const loadProjects = useAppStore((state) => state.loadProjects);
   
   // Actions
   const setClipSegments = useAppStore((state) => state.setClipSegments);
@@ -41,64 +43,110 @@ const EditorPage: React.FC = () => {
   
   // Local state
   const [showSettings, setShowSettings] = useState(false);
-  const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState({ title: '', description: '' });
+  const [showToast, setShowToast] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   // Load project data
   useEffect(() => {
-    setIsLoading(true);
-    setError(null);
-    
-    if (projectId) {
-      logger.info('Loading project data', { projectId });
+    const loadProject = async () => {
+      setIsLoading(true);
+      setError(null);
       
-      // Find project in store
-      const project = projects.find((p) => p.id === projectId);
-      
-      if (project) {
-        logger.info('Project found in store', { projectId });
-        setCurrentProject(project);
-        
-        // Load transcript and clips if needed
-        if (transcript.length === 0) {
-          setTranscript(mockTranscript);
+      try {
+        if (!projectId) {
+          throw new Error('No project ID provided');
         }
         
-        if (clipSegments.length === 0) {
-          setClipSegments(mockClipSegments);
+        logger.info('Loading project data', { projectId });
+        
+        // Try to load from database first
+        if (projectId) {
+          try {
+            const project = await VideoProjectService.getById(projectId);
+            if (project) {
+              logger.info('Project loaded from database', { projectId });
+              setCurrentProject(project);
+              
+              // Load transcript and clips if needed
+              if (transcript.length === 0) {
+                setTranscript(mockTranscript);
+              }
+              
+              if (clipSegments.length === 0) {
+                setClipSegments(mockClipSegments);
+              }
+              
+              setIsLoading(false);
+              return;
+            }
+          } catch (dbError) {
+            logger.warn('Failed to load project from database', dbError as Error);
+            // Continue to try loading from store
+          }
         }
         
-        setIsLoading(false);
-      } else {
-        // Try to find in mock data
-        logger.info('Project not found in store, checking mock data', { projectId });
-        const mockProject = mockProjects.find((p) => p.id === projectId);
+        // Find project in store
+        const project = projects.find((p) => p.id === projectId);
         
-        if (mockProject) {
-          setCurrentProject(mockProject);
-          setTranscript(mockTranscript);
-          setClipSegments(mockClipSegments);
+        if (project) {
+          logger.info('Project found in store', { projectId });
+          setCurrentProject(project);
+          
+          // Load transcript and clips if needed
+          if (transcript.length === 0) {
+            setTranscript(mockTranscript);
+          }
+          
+          if (clipSegments.length === 0) {
+            setClipSegments(mockClipSegments);
+          }
+          
           setIsLoading(false);
         } else {
-          logger.error('Project not found', { projectId });
-          setError('Project not found');
-          setIsLoading(false);
+          // Try to find in mock data
+          logger.info('Project not found in store, checking mock data', { projectId });
+          const mockProject = mockProjects.find((p) => p.id === projectId);
+          
+          if (mockProject) {
+            setCurrentProject(mockProject);
+            setTranscript(mockTranscript);
+            setClipSegments(mockClipSegments);
+            setIsLoading(false);
+          } else {
+            // Try to load all projects in case it hasn't been loaded yet
+            await loadProjects();
+            
+            // Check again after loading
+            const refreshedProject = projects.find((p) => p.id === projectId);
+            if (refreshedProject) {
+              setCurrentProject(refreshedProject);
+              setTranscript(mockTranscript);
+              setClipSegments(mockClipSegments);
+              setIsLoading(false);
+            } else {
+              logger.error('Project not found', { projectId });
+              setError('Project not found');
+              setIsLoading(false);
+            }
+          }
         }
+      } catch (error) {
+        logger.error('Error loading project', error as Error);
+        setError(error instanceof Error ? error.message : 'Failed to load project');
+        setIsLoading(false);
       }
-    } else {
-      logger.error('No project ID provided');
-      setError('No project ID provided');
-      setIsLoading(false);
-    }
+    };
+    
+    loadProject();
     
     return () => {
       // Clean up
       setCurrentProject(null);
     };
-  }, [projectId, projects, navigate, setCurrentProject, setTranscript, setClipSegments]);
+  }, [projectId, projects, navigate, setCurrentProject, setTranscript, setClipSegments, loadProjects]);
   
   const selectedClip = clipSegments.find((clip) => clip.id === selectedClipId);
   
@@ -134,7 +182,7 @@ const EditorPage: React.FC = () => {
     setShowToast(true);
   };
   
-  const handleCaptionStyleChange = (style: ExportOptions['captionStyle']) => {
+  const handleCaptionStyleChange = (style: typeof exportOptions.captionStyle) => {
     updateExportOptions({ captionStyle: style });
   };
   

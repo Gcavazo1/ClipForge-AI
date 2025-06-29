@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { VideoProject, ClipSegment, TranscriptSegment, ExportOptions, User } from '../types';
 import { VideoProjectService, ClipSegmentService, TranscriptSegmentService, UserProfileService } from '../lib/database';
-import { logger } from '../lib/logger';
+import { logger } from '../logger';
 
 interface AppState {
   // User state
@@ -193,8 +193,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Project management
   addProject: (project) => {
     logger.debug('Adding project to store', { projectId: project.id });
+    
+    // Ensure project has valid dates
+    const validatedProject = {
+      ...project,
+      createdAt: project.createdAt || new Date().toISOString(),
+      updatedAt: project.updatedAt || new Date().toISOString()
+    };
+    
     set((state) => ({ 
-      projects: [project, ...state.projects] 
+      projects: [validatedProject, ...state.projects] 
     }));
   },
   
@@ -234,7 +242,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       logger.info('Loading projects for user', { userId: user.id });
       const projects = await VideoProjectService.getByUserId(user.id);
-      set({ projects });
+      
+      // Ensure all projects have valid dates
+      const validatedProjects = projects.map(project => ({
+        ...project,
+        createdAt: project.createdAt || new Date().toISOString(),
+        updatedAt: project.updatedAt || new Date().toISOString()
+      }));
+      
+      set({ projects: validatedProjects });
       logger.debug('Projects loaded successfully', { count: projects.length });
     } catch (error) {
       logger.error('Failed to load projects', error as Error);

@@ -2,9 +2,10 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Play, Clock, Edit2, MoreVertical, Trash2, Film } from 'lucide-react';
 import { VideoProject } from '../../types';
-import { formatLongTime, formatDate } from '../../lib/utils';
+import { formatLongTime, formatDate, isValidUrl } from '../../lib/utils';
 import Button from '../ui/button';
 import Progress from '../ui/progress';
+import { logger } from '../../lib/logger';
 
 interface ProjectCardProps {
   project: VideoProject;
@@ -15,6 +16,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete }) => {
   const navigate = useNavigate();
   
   const handleEdit = () => {
+    logger.info('Navigating to editor', { projectId: project.id });
     navigate(`/editor/${project.id}`);
   };
   
@@ -34,7 +36,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete }) => {
     >
       {/* Thumbnail */}
       <div className="relative aspect-video overflow-hidden bg-background-lighter">
-        {project.thumbnailUrl ? (
+        {project.thumbnailUrl && isValidUrl(project.thumbnailUrl) ? (
           <img 
             src={project.thumbnailUrl} 
             alt={project.title} 
