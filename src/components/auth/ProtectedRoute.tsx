@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuthService } from '../../hooks/useAuthService';
+import { useAuth } from '../../hooks/useAuth';
 import { AlertCircle } from 'lucide-react';
 import { logger } from '../../lib/logger';
 import Loader from '../ui/loader';
@@ -16,7 +16,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   requireAuth = true,
   redirectTo = '/signin'
 }) => {
-  const { user, loading, initialized, error } = useAuthService();
+  const { user, loading, initialized, error } = useAuth();
   const location = useLocation();
 
   logger.debug('ProtectedRoute render state', { 
