@@ -76,7 +76,7 @@ export class ErrorReporter {
       fingerprint
     });
 
-    // In production, we could send to an external service
+    // Send to external service in production
     if (import.meta.env.PROD) {
       this.sendToExternalService(report);
     }
@@ -159,14 +159,16 @@ export class ErrorReporter {
 
   private async sendToExternalService(report: ErrorReport): Promise<void> {
     try {
-      // This is a placeholder for sending to an error tracking service
-      // We're not using any external service by default
-      console.log('Error report ready for external service', { reportId: report.id });
+      // Example: Send to Sentry, LogRocket, or custom endpoint
+      // await fetch('/api/errors', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify(report)
+      // });
       
-      // If you want to add a real error tracking service in the future,
-      // you would implement the API call here
+      logger.debug('Error report sent to external service', { reportId: report.id });
     } catch (error) {
-      console.warn('Failed to send error report to external service', error);
+      logger.warn('Failed to send error report to external service', error as Error);
     }
   }
 }

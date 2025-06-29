@@ -1,33 +1,30 @@
 html,
 body {
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 body {
-  margin: 0;
   position: relative;
-  width: 100%;
-  height: 100%;
   cursor: none;
 }
 
-#container {
+.magic-mouse-container {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
   position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: -1;
   pointer-events: none;
+  z-index: 9999;
 }
 
-canvas {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.a-title {
+.magic-title {
   position: absolute;
   color: transparent;
   -webkit-background-clip: text;
@@ -38,7 +35,7 @@ canvas {
   filter: drop-shadow(2px 4px 6px black);
 }
 
-.a-second-title {
+.magic-second-title {
   position: absolute;
   margin-top: 25vh;
   pointer-events: none;
@@ -47,6 +44,16 @@ canvas {
   font-size: -webkit-xxx-large;
   font-weight: 900;
   mix-blend-mode: color-dodge;
+}
+
+canvas.magic-canvas {
+  width: 100%;
+  height: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 9998;
 }
 
 /* Make all buttons and interactive elements show a pointer cursor */
