@@ -82,7 +82,7 @@ const HomePage: React.FC = () => {
             <div className="inline-block bg-primary-900/30 p-2 rounded-lg mb-6 backdrop-blur-sm">
               <Scissors size={28} className="text-primary-400" />
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold mb-6 bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent title-font">
+            <h1 className="text-4xl md:text-8xl font-bold mb-6 bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent title-font">
               Turn Long Videos Into Engaging Clips with AI
             </h1>
             <p className="text-lg text-foreground-muted mb-8 max-w-2xl mx-auto">
