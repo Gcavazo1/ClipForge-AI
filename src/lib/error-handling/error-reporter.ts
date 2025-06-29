@@ -159,14 +159,9 @@ export class ErrorReporter {
 
   private async sendToExternalService(report: ErrorReport): Promise<void> {
     try {
-      // Example: Send to Sentry, LogRocket, or custom endpoint
-      // await fetch('/api/errors', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(report)
-      // });
-      
-      logger.debug('Error report sent to external service', { reportId: report.id });
+      // This is a placeholder for sending to an error tracking service
+      // We're not using Sentry or any other service by default
+      logger.debug('Error report ready for external service', { reportId: report.id });
     } catch (error) {
       logger.warn('Failed to send error report to external service', error as Error);
     }
