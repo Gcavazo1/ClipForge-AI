@@ -1,4 +1,4 @@
-import SimpleLinearRegression from 'ml-regression-simple-linear';
+import { SimpleLinearRegression } from 'ml-regression-simple-linear';
 import { supabase } from './supabase';
 import { ProphecyRequest, ProphecyResult, ClipAnalytics } from '../types';
 
