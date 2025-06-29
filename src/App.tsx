@@ -23,6 +23,7 @@ const ResetPasswordPage = withLazyLoading(() => import('./pages/ResetPasswordPag
 const CheckoutSuccessPage = withLazyLoading(() => import('./pages/CheckoutSuccessPage'));
 const CheckoutCancelPage = withLazyLoading(() => import('./pages/CheckoutCancelPage'));
 const NotFoundPage = withLazyLoading(() => import('./pages/NotFoundPage'));
+const UploadsPage = withLazyLoading(() => import('./pages/UploadsPage'), 'Loading uploads...');
 
 // Create optimized query client
 const queryClient = new QueryClient({
@@ -50,6 +51,7 @@ if (typeof window !== 'undefined') {
   // Preload dashboard and editor for authenticated users
   preloadComponent(() => import('./pages/DashboardPage'));
   preloadComponent(() => import('./pages/EditorPage'));
+  preloadComponent(() => import('./pages/UploadsPage'));
 }
 
 function AppContent() {
@@ -97,6 +99,11 @@ function AppContent() {
         <Route path="prophecy" element={
           <ProtectedRoute>
             <ProphecyPage />
+          </ProtectedRoute>
+        } />
+        <Route path="uploads" element={
+          <ProtectedRoute>
+            <UploadsPage />
           </ProtectedRoute>
         } />
         <Route path="settings" element={

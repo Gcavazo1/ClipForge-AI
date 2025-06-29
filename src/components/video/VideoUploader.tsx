@@ -1,17 +1,34 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, Film, AlertCircle, Check, Clock, Zap, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { 
+  Upload, 
+  Film, 
+  AlertCircle, 
+  Check, 
+  Clock, 
+  Zap, 
+  Wifi, 
+  WifiOff, 
+  Loader2,
+  Pause,
+  Play,
+  X,
+  RefreshCw,
+  FileVideo
+} from 'lucide-react';
 import Button from '../ui/button';
 import Progress from '../ui/progress';
 import Loader from '../ui/loader';
 import { VideoProject } from '../../types';
-import { generateId } from '../../lib/utils';
 import { VideoProjectService } from '../../lib/database';
-import { VideoProcessingService } from '../../lib/video-processing';
 import { AIServiceIntegration } from '../../lib/ai/ai-service-integration';
 import { useAppStore } from '../../store';
 import { logger } from '../../lib/logger';
 import { useAuth } from '../../hooks/useAuth';
+import { VideoMetadataExtractor } from '../../lib/video-upload/VideoMetadataExtractor';
+import { videoUploadService } from '../../lib/video-upload/VideoUploadService';
+import { uploadCache } from '../../lib/video-upload/UploadCache';
+import { Toast, ToastTitle, ToastDescription } from '../ui/toast';
 
 interface VideoUploaderProps {
   onUploadComplete: (project: VideoProject) => void;
@@ -33,6 +50,10 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
   const [processingStages, setProcessingStages] = useState<ProcessingStage[]>([]);
   const [estimatedTime, setEstimatedTime] = useState<number | null>(null);
   const [serviceStatus, setServiceStatus] = useState<any>(null);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState({ title: '', description: '', variant: 'default' as const });
+  const [uploadTaskId, setUploadTaskId] = useState<string | null>(null);
+  const [recentUploads, setRecentUploads] = useState<any[]>([]);
   
   const user = useAppStore((state) => state.user);
   const isUploading = useAppStore((state) => state.isUploading);
@@ -42,6 +63,10 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
   
   const { initialized, loading } = useAuth();
   
+  // Reference for progress update interval
+  const progressIntervalRef = useRef<number | null>(null);
+  
+  // Initialize processing stages
   const initializeProcessingStages = (): ProcessingStage[] => [
     {
       name: 'Uploading video',
@@ -76,7 +101,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
   ];
 
   // Check AI service status on component mount
-  React.useEffect(() => {
+  useEffect(() => {
     const checkServiceStatus = async () => {
       try {
         const status = AIServiceIntegration.getServiceStatus();
@@ -92,7 +117,100 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
     };
 
     checkServiceStatus();
+    
+    // Load recent uploads from cache
+    const cachedUploads = uploadCache.getAllUploads();
+    if (cachedUploads.length > 0) {
+      setRecentUploads(cachedUploads.slice(0, 5));
+    }
+    
+    return () => {
+      // Clean up progress interval if exists
+      if (progressIntervalRef.current) {
+        window.clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+    };
   }, []);
+  
+  // Update progress for active upload task
+  useEffect(() => {
+    if (uploadTaskId) {
+      // Set up interval to check progress
+      progressIntervalRef.current = window.setInterval(() => {
+        const task = videoUploadService.getUploadTask(uploadTaskId);
+        if (task) {
+          // Update progress in UI
+          updateStage(0, task.progress);
+          setUploadState(true, task.progress);
+          
+          // Check if task completed or failed
+          if (task.status === 'completed' && task.result) {
+            // Clear interval
+            if (progressIntervalRef.current) {
+              window.clearInterval(progressIntervalRef.current);
+              progressIntervalRef.current = null;
+            }
+            
+            // Update UI
+            updateStage(0, 100, 'completed');
+            updateStage(1, 100, 'completed');
+            setUploadState(false);
+            
+            // Cache the upload
+            uploadCache.addUpload(
+              task.result.id,
+              task.file.name,
+              task.file.size,
+              task.file.type,
+              task.result.videoUrl,
+              task.result.thumbnailUrl
+            );
+            
+            // Refresh recent uploads
+            setRecentUploads(uploadCache.getAllUploads().slice(0, 5));
+            
+            // Call completion callback
+            onUploadComplete(task.result);
+            
+            // Show success toast
+            setToastMessage({
+              title: 'Upload Complete',
+              description: 'Your video has been uploaded successfully.',
+              variant: 'default'
+            });
+            setShowToast(true);
+          } else if (task.status === 'error') {
+            // Clear interval
+            if (progressIntervalRef.current) {
+              window.clearInterval(progressIntervalRef.current);
+              progressIntervalRef.current = null;
+            }
+            
+            // Update UI
+            updateStage(0, 0, 'error', task.error);
+            setUploadState(false);
+            
+            // Show error toast
+            setToastMessage({
+              title: 'Upload Failed',
+              description: task.error || 'An unknown error occurred during upload.',
+              variant: 'error'
+            });
+            setShowToast(true);
+          }
+        }
+      }, 500);
+      
+      // Clean up interval on unmount
+      return () => {
+        if (progressIntervalRef.current) {
+          window.clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
+      };
+    }
+  }, [uploadTaskId, onUploadComplete, setUploadState]);
 
   const updateStage = (stageIndex: number, progress: number, status?: ProcessingStage['status'], error?: string) => {
     setProcessingStages(prev => prev.map((stage, index) => 
@@ -132,7 +250,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
     setProcessingStages(initializeProcessingStages());
     
     // Validate file
-    const validation = VideoProcessingService.validateVideo(file);
+    const validation = VideoMetadataExtractor.validateVideo(file);
     if (!validation.valid) {
       setError(validation.error || 'Invalid file');
       return;
@@ -143,177 +261,110 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
     setEstimatedTime(estimate.estimatedTime);
 
     try {
-      // Stage 1: Create project record
-      const projectId = generateId();
-      const newProject: VideoProject = {
-        id: projectId,
+      // Create upload task
+      const task = videoUploadService.createUploadTask(file, user.id, {
         title: file.name.replace(/\.[^/.]+$/, ''),
-        videoUrl: '',
-        thumbnailUrl: '',
-        duration: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        status: 'uploading',
-        progress: 0,
-        size: file.size,
-      };
-
-      const createdProject = await VideoProjectService.create(newProject);
-      setCurrentProject(createdProject);
+        generateThumbnail: true,
+        thumbnailTimestamp: 1,
+        quality: 'high'
+      });
       
-      // Stage 2: Upload and process video
+      // Store task ID for progress tracking
+      setUploadTaskId(task.id);
+      
+      // Update UI state
       updateStage(0, 0, 'active');
       setUploadState(true, 0);
       
-      const processingResult = await VideoProcessingService.processVideo(
-        file,
-        user.id,
-        {
-          generateThumbnail: true,
-          thumbnailTimestamp: 1,
-          quality: 'high'
-        },
-        (progress) => {
-          updateStage(0, progress);
-          setUploadState(true, progress);
-        }
-      );
-
-      updateStage(0, 100, 'completed');
-      updateStage(1, 100, 'completed');
-      setUploadState(false);
-
-      // Update project with video details
-      const updatedProject = await VideoProjectService.update(createdProject.id, {
-        ...createdProject,
-        videoUrl: processingResult.processedVideoUrl,
-        thumbnailUrl: processingResult.thumbnailUrl,
-        duration: processingResult.duration,
-        status: 'processing',
-        progress: 40
+      // Set current project
+      if (task.result) {
+        setCurrentProject(task.result);
+      }
+      
+      logger.info('Video upload started', { 
+        taskId: task.id,
+        fileName: file.name,
+        fileSize: file.size
       });
-
-      setCurrentProject(updatedProject);
-
-      // Stage 3: AI Processing Pipeline with comprehensive error handling
-      updateStage(2, 0, 'active');
-      setTranscribeState(true, 0);
-
-      try {
-        const aiResult = await AIServiceIntegration.processVideoWithAI(
-          {
-            projectId: updatedProject.id,
-            videoFile: file,
-            userId: user.id,
-            options: {
-              transcriptionProvider: 'openai',
-              analysisProvider: 'groq',
-              language: 'en',
-              generateHighlights: true,
-              autoCreateClips: true
-            }
-          },
-          (stage, progress) => {
-            // Map AI stages to our processing stages
-            switch (stage) {
-              case 'Extracting audio':
-                updateStage(2, progress);
-                break;
-              case 'Transcribing audio':
-              case 'Processing transcription':
-                updateStage(3, progress);
-                break;
-              case 'Analyzing highlights':
-              case 'Creating highlight clips':
-                updateStage(4, progress);
-                break;
-            }
-            setTranscribeState(true, progress);
-          }
-        );
-
-        // Complete all stages
-        updateStage(2, 100, 'completed');
-        updateStage(3, 100, 'completed');
-        updateStage(4, 100, 'completed');
-        setTranscribeState(false);
-
-        // Final project update
-        const finalProject = await VideoProjectService.updateStatus(
-          updatedProject.id,
-          'ready',
-          100
-        );
-
-        logger.info('Video upload and processing completed', {
-          projectId: updatedProject.id,
-          transcriptSegments: aiResult.transcript.length,
-          highlights: aiResult.highlights.length,
-          processingTime: aiResult.processingTime
-        });
-
-        // Call completion callback
-        onUploadComplete({
-          ...updatedProject,
-          status: 'ready',
-          progress: 100
-        });
-
-      } catch (aiError) {
-        logger.error('AI processing failed', aiError as Error);
-        
-        // Update the failed stage with specific error
-        const activeStageIndex = processingStages.findIndex(s => s.status === 'active');
-        if (activeStageIndex >= 0) {
-          updateStage(activeStageIndex, 0, 'error', (aiError as Error).message);
-        }
-        
-        // Update project status but don't fail completely - user can still use basic features
-        await VideoProjectService.updateStatus(
-          updatedProject.id,
-          'ready', // Mark as ready even without AI features
-          100,
-          `AI processing failed: ${(aiError as Error).message}`
-        );
-
-        // Still call completion callback so user can access the video
-        onUploadComplete({
-          ...updatedProject,
-          status: 'ready',
-          progress: 100,
-          error: `AI processing failed: ${(aiError as Error).message}`
-        });
-      }
-
-      // Reset states
+      
+      // Note: The actual upload processing happens in the VideoUploadService
+      // and progress is tracked via the useEffect hook above
+      
+    } catch (error) {
+      logger.error('Failed to start upload', error as Error);
+      setError(error instanceof Error ? error.message : 'Failed to start upload');
       setUploadState(false);
       setTranscribeState(false);
-      
-    } catch (uploadError) {
-      logger.error('Video upload and processing failed', uploadError as Error);
-      
-      // Update failed stage
-      const activeStageIndex = processingStages.findIndex(s => s.status === 'active');
-      if (activeStageIndex >= 0) {
-        updateStage(activeStageIndex, 0, 'error', (uploadError as Error).message);
-      }
-      
-      setError(`Upload failed: ${(uploadError as Error).message}`);
-      setUploadState(false);
-      setTranscribeState(false);
-
-      // Update project status if it was created
-      if (currentProject) {
-        await VideoProjectService.updateStatus(
-          currentProject.id,
-          'error',
-          0,
-          uploadError instanceof Error ? uploadError.message : 'Unknown error'
-        );
-      }
     }
   }, [user, onUploadComplete, setUploadState, setTranscribeState, processingStages, currentProject, serviceStatus, initialized, loading]);
   
+  const handleCancelUpload = useCallback(() => {
+    if (uploadTaskId) {
+      videoUploadService.cancelUploadTask(uploadTaskId);
+      
+      // Update UI
+      setUploadState(false);
+      setTranscribeState(false);
+      
+      // Show toast
+      setToastMessage({
+        title: 'Upload Cancelled',
+        description: 'The upload has been cancelled.',
+        variant: 'default'
+      });
+      setShowToast(true);
+      
+      // Reset state
+      setUploadTaskId(null);
+      setProcessingStages(initializeProcessingStages());
+    }
+  }, [uploadTaskId, setUploadState, setTranscribeState]);
+  
+  const handlePauseResumeUpload = useCallback(() => {
+    if (!uploadTaskId) return;
+    
+    const task = videoUploadService.getUploadTask(uploadTaskId);
+    if (!task) return;
+    
+    if (task.status === 'uploading') {
+      if (task.uploader) {
+        const status = task.uploader.getStatus();
+        if (status.paused) {
+          videoUploadService.resumeUploadTask(uploadTaskId);
+        } else {
+          videoUploadService.pauseUploadTask(uploadTaskId);
+        }
+      }
+    }
+  }, [uploadTaskId]);
+  
+  const handleUseRecentUpload = useCallback((upload: any) => {
+    // Create a project from the cached upload
+    const project: VideoProject = {
+      id: upload.id,
+      title: upload.fileName.replace(/\.[^/.]+$/, ''),
+      videoUrl: upload.url,
+      thumbnailUrl: upload.thumbnailUrl,
+      duration: upload.metadata?.duration || 0,
+      createdAt: new Date(upload.uploadedAt).toISOString(),
+      updatedAt: new Date(upload.uploadedAt).toISOString(),
+      status: 'ready',
+      progress: 100,
+      size: upload.fileSize
+    };
+    
+    // Call completion callback
+    onUploadComplete(project);
+    
+    // Show success toast
+    setToastMessage({
+      title: 'Video Selected',
+      description: 'Using previously uploaded video.',
+      variant: 'default'
+    });
+    setShowToast(true);
+  }, [onUploadComplete]);
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => {
       if (acceptedFiles.length > 0) {
@@ -324,9 +375,9 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
     accept: {
       'video/mp4': ['.mp4'],
       'video/quicktime': ['.mov'],
-      'video/mov': ['.mov'],
-      'video/avi': ['.avi'],
+      'video/x-msvideo': ['.avi'],
       'video/webm': ['.webm'],
+      'video/x-matroska': ['.mkv'],
     },
     maxSize: 500 * 1024 * 1024, // 500MB
     disabled: isUploading || isTranscribing || !initialized || loading
@@ -349,6 +400,10 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
     const completedStages = processingStages.filter(s => s.status === 'completed').length;
     const errorStages = processingStages.filter(s => s.status === 'error').length;
     const totalProgress = (completedStages / processingStages.length) * 100;
+    
+    // Get upload task for pause/resume button
+    const task = uploadTaskId ? videoUploadService.getUploadTask(uploadTaskId) : null;
+    const isPaused = task?.uploader?.getStatus().paused;
 
     return (
       <div className="border rounded-lg p-6 bg-background-light">
@@ -437,6 +492,29 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
           </p>
         )}
 
+        {/* Control buttons */}
+        <div className="flex justify-center mt-4 space-x-3">
+          {task?.status === 'uploading' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePauseResumeUpload}
+              icon={isPaused ? <Play size={16} /> : <Pause size={16} />}
+            >
+              {isPaused ? 'Resume' : 'Pause'}
+            </Button>
+          )}
+          
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCancelUpload}
+            icon={<X size={16} />}
+          >
+            Cancel
+          </Button>
+        </div>
+
         {errorStages > 0 && (
           <div className="mt-4 p-3 bg-warning-900/20 text-warning-500 rounded-md text-sm">
             <p className="font-medium">Some AI features may not be available</p>
@@ -478,6 +556,37 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
         </div>
       )}
 
+      {/* Recent uploads */}
+      {recentUploads.length > 0 && (
+        <div className="bg-background-light rounded-lg p-4">
+          <h3 className="text-sm font-medium mb-3">Recent Uploads</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {recentUploads.map((upload) => (
+              <div 
+                key={upload.id}
+                className="bg-background p-2 rounded-lg cursor-pointer hover:bg-background-lighter transition-colors"
+                onClick={() => handleUseRecentUpload(upload)}
+              >
+                <div className="flex items-center">
+                  <div className="w-10 h-10 bg-background-lighter rounded flex items-center justify-center mr-2">
+                    <FileVideo size={18} className="text-primary-400" />
+                  </div>
+                  <div className="overflow-hidden">
+                    <div className="text-sm font-medium truncate" title={upload.fileName}>
+                      {upload.fileName}
+                    </div>
+                    <div className="text-xs text-foreground-muted">
+                      {formatFileSize(upload.fileSize)} • {new Date(upload.uploadedAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Upload dropzone */}
       <div 
         {...getRootProps()} 
         className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
@@ -502,7 +611,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
           Select Video
         </Button>
         <p className="text-xs text-foreground-muted mt-4">
-          Supported formats: MP4, MOV, AVI, WebM (max 500MB)
+          Supported formats: MP4, MOV, AVI, WebM, MKV (max 500MB)
         </p>
         
         {error && (
@@ -512,6 +621,14 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
           </div>
         )}
       </div>
+      
+      {/* Toast notifications */}
+      {showToast && (
+        <Toast open={showToast} onOpenChange={setShowToast} variant={toastMessage.variant}>
+          <ToastTitle>{toastMessage.title}</ToastTitle>
+          <ToastDescription>{toastMessage.description}</ToastDescription>
+        </Toast>
+      )}
     </div>
   );
 };
