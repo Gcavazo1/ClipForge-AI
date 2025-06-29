@@ -73,6 +73,8 @@ export async function signUp(email: string, password: string, name: string) {
         throw new Error('Please enter a valid email address.');
       } else if (error.message.includes('Database error')) {
         throw new Error('There was a problem creating your account. Please try again in a moment.');
+      } else if (error.message.includes('rate limit') || error.message.includes('after')) {
+        throw new Error('Too many sign-up attempts. Please wait a moment before trying again.');
       } else {
         throw new Error(error.message);
       }
@@ -187,7 +189,7 @@ export async function signIn(email: string, password: string) {
         throw new Error('Invalid email or password. Please check your credentials and try again.');
       } else if (error.message.includes('Email not confirmed')) {
         throw new Error('Please check your email and click the confirmation link before signing in.');
-      } else if (error.message.includes('Too many requests')) {
+      } else if (error.message.includes('Too many requests') || error.message.includes('rate limit')) {
         throw new Error('Too many sign-in attempts. Please wait a moment before trying again.');
       } else {
         throw new Error(error.message);
@@ -236,6 +238,11 @@ export async function resetPassword(email: string) {
 
     if (error) {
       logger.error('Password reset failed', error, { email });
+      
+      if (error.message.includes('rate limit') || error.message.includes('after')) {
+        throw new Error('Too many password reset attempts. Please wait a moment before trying again.');
+      }
+      
       throw new Error(error.message);
     }
 

@@ -81,6 +81,8 @@ const AuthForm: React.FC<AuthFormProps> = ({ mode }) => {
           errorMessage = 'Please check your email and click the confirmation link before signing in.';
         } else if (errorMessage.includes('User already registered')) {
           errorMessage = 'An account with this email already exists. Please sign in instead.';
+        } else if (errorMessage.includes('rate limit') || errorMessage.includes('Too many') || errorMessage.includes('after')) {
+          errorMessage = 'Too many attempts. Please wait a moment before trying again.';
         }
         
         setError(errorMessage);
