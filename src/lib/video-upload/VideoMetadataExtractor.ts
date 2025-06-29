@@ -95,11 +95,27 @@ export class VideoMetadataExtractor {
    */
   static validateVideo(file: File): { valid: boolean; error?: string } {
     // Check file type
-    const validTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/x-matroska'];
-    if (!validTypes.includes(file.type)) {
+    const validTypes = [
+      'video/mp4', 
+      'video/quicktime', 
+      'video/x-msvideo', 
+      'video/webm', 
+      'video/x-matroska',
+      'video/mov'
+    ];
+    
+    // Check file extension as fallback
+    const fileExt = file.name.split('.').pop()?.toLowerCase();
+    const validExtensions = ['mp4', 'mov', 'avi', 'webm', 'mkv'];
+    
+    // If MIME type is not recognized but extension is valid, consider it valid
+    const hasValidExtension = fileExt && validExtensions.includes(fileExt);
+    const hasValidMimeType = validTypes.includes(file.type);
+    
+    if (!hasValidMimeType && !hasValidExtension) {
       return {
         valid: false,
-        error: `Unsupported video format: ${file.type}. Please use MP4, MOV, AVI, WebM, or MKV.`
+        error: `Unsupported video format: ${file.type || fileExt}. Please use MP4, MOV, AVI, WebM, or MKV.`
       };
     }
     

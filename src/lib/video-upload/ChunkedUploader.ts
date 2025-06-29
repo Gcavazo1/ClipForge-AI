@@ -94,6 +94,12 @@ export class ChunkedUploader {
         concurrentUploads: this.config.concurrentUploads
       });
 
+      // For single chunk uploads, use direct upload
+      if (totalChunks === 1) {
+        const result = await this.uploadSingleFile(fileName, onProgress);
+        return result;
+      }
+
       // Upload all chunks
       await this.uploadAllChunks(fileName, totalChunks, onProgress);
 
@@ -120,6 +126,57 @@ export class ChunkedUploader {
         fileSize: this.file.size,
         userId: this.userId
       });
+      throw error;
+    }
+  }
+
+  /**
+   * Upload a single file directly (no chunking)
+   */
+  private async uploadSingleFile(
+    fileName: string,
+    onProgress?: (progress: UploadProgress) => void
+  ): Promise<UploadResult> {
+    try {
+      const { data, error } = await supabase.storage
+        .from(this.bucket)
+        .upload(fileName, this.file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: this.file.type, // Explicitly set content type
+          onUploadProgress: (progress) => {
+            if (onProgress) {
+              const percentage = (progress.loaded / progress.total) * 100;
+              this.uploadedBytes = progress.loaded;
+              
+              onProgress({
+                loaded: progress.loaded,
+                total: progress.total,
+                percentage,
+                speed: this.calculateSpeed(progress.loaded),
+                timeRemaining: this.calculateTimeRemaining(progress.loaded, progress.total),
+                currentChunk: 1,
+                totalChunks: 1
+              });
+            }
+          }
+        });
+
+      if (error) throw error;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from(this.bucket)
+        .getPublicUrl(data.path);
+
+      return {
+        path: data.path,
+        url: publicUrl,
+        size: this.file.size,
+        mimeType: this.file.type
+      };
+    } catch (error) {
+      logger.error('Single file upload failed', error as Error);
       throw error;
     }
   }
@@ -276,6 +333,11 @@ export class ChunkedUploader {
       ? `${fileName}.part${chunkIndex}` 
       : fileName;
     
+    // Create a File object from the Blob to preserve MIME type
+    const chunkFile = new File([chunk], chunkName, { 
+      type: this.file.type // Use the original file's MIME type
+    });
+    
     return RetryManager.withRetry(
       async () => {
         if (this.abortController.signal.aborted) {
@@ -284,9 +346,10 @@ export class ChunkedUploader {
 
         const { error } = await supabase.storage
           .from(this.bucket)
-          .upload(chunkName, chunk, {
+          .upload(chunkName, chunkFile, {
             cacheControl: '3600',
-            upsert: chunkIndex > 0 ? true : false // Only allow upsert for chunks after the first
+            upsert: chunkIndex > 0 ? true : false, // Only allow upsert for chunks after the first
+            contentType: this.file.type // Explicitly set content type
           });
 
         if (error) throw error;
@@ -373,6 +436,26 @@ export class ChunkedUploader {
       currentChunk: this.completedChunks.size,
       totalChunks
     };
+  }
+
+  /**
+   * Calculate upload speed
+   */
+  private calculateSpeed(loadedBytes: number): number {
+    const now = Date.now();
+    const elapsedSeconds = (now - this.uploadStartTime) / 1000;
+    return elapsedSeconds > 0 ? loadedBytes / elapsedSeconds : 0;
+  }
+
+  /**
+   * Calculate time remaining
+   */
+  private calculateTimeRemaining(loaded: number, total: number): number {
+    const now = Date.now();
+    const elapsedSeconds = (now - this.uploadStartTime) / 1000;
+    const bytesPerSecond = elapsedSeconds > 0 ? loaded / elapsedSeconds : 0;
+    
+    return bytesPerSecond > 0 ? (total - loaded) / bytesPerSecond : 0;
   }
 
   /**

@@ -61,6 +61,25 @@ export class VideoUploadService {
     const taskId = generateId();
     const projectId = generateId();
     
+    // Validate file type
+    const validation = VideoMetadataExtractor.validateVideo(file);
+    if (!validation.valid) {
+      const task: UploadTask = {
+        id: taskId,
+        file,
+        userId,
+        projectId,
+        progress: 0,
+        status: 'error',
+        error: validation.error,
+        startTime: Date.now(),
+        options: {}
+      };
+      
+      this.uploadTasks.set(taskId, task);
+      return task;
+    }
+    
     const task: UploadTask = {
       id: taskId,
       file,
@@ -87,7 +106,8 @@ export class VideoUploadService {
       taskId, 
       fileName: file.name, 
       fileSize: file.size,
-      userId
+      userId,
+      mimeType: file.type
     });
     
     // Start processing the queue
@@ -207,7 +227,8 @@ export class VideoUploadService {
     try {
       logger.info('Processing upload task', { 
         taskId: task.id, 
-        fileName: task.file.name 
+        fileName: task.file.name,
+        mimeType: task.file.type
       });
       
       // Update task status

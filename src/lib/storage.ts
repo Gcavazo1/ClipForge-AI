@@ -34,6 +34,7 @@ export class StorageService {
         .upload(fileName, file, {
           cacheControl: '3600',
           upsert: false,
+          contentType: file.type, // Explicitly set content type
           onUploadProgress: (progress) => {
             const percentage = (progress.loaded / progress.total) * 100;
             onProgress?.(percentage);
@@ -70,7 +71,8 @@ export class StorageService {
         .from('thumbnails')
         .upload(fileName, file, {
           cacheControl: '3600',
-          upsert: false
+          upsert: false,
+          contentType: 'image/jpeg' // Explicitly set content type
         });
 
       if (error) throw error;
@@ -102,7 +104,8 @@ export class StorageService {
         .from('exports')
         .upload(fileName, file, {
           cacheControl: '3600',
-          upsert: false
+          upsert: false,
+          contentType: file.type // Explicitly set content type
         });
 
       if (error) throw error;
@@ -141,7 +144,8 @@ export class StorageService {
         .from('avatars')
         .upload(fileName, file, {
           cacheControl: '3600',
-          upsert: true
+          upsert: true,
+          contentType: file.type // Explicitly set content type
         });
 
       if (error) throw error;
@@ -234,7 +238,7 @@ export class StorageService {
     const limits = {
       video: {
         maxSize: 500 * 1024 * 1024, // 500MB
-        allowedTypes: ['video/mp4', 'video/quicktime', 'video/mov', 'video/avi', 'video/webm']
+        allowedTypes: ['video/mp4', 'video/quicktime', 'video/mov', 'video/avi', 'video/webm', 'video/x-msvideo', 'video/x-matroska']
       },
       image: {
         maxSize: 5 * 1024 * 1024, // 5MB
@@ -258,7 +262,7 @@ export class StorageService {
     if (!config.allowedTypes.includes(file.type)) {
       return {
         valid: false,
-        error: `File type ${file.type} is not allowed`
+        error: `File type ${file.type} is not allowed. Supported types: ${config.allowedTypes.join(', ')}`
       };
     }
 
