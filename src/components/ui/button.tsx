@@ -13,11 +13,11 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500',
-  secondary: 'bg-secondary-500 text-white hover:bg-secondary-600 focus:ring-secondary-400',
+  primary: 'bg-gradient-to-r from-primary-600 to-primary-700 text-white hover:from-primary-500 hover:to-primary-600 focus:ring-primary-500 shadow-md shadow-primary-500/20',
+  secondary: 'bg-gradient-to-r from-secondary-500 to-secondary-600 text-white hover:from-secondary-400 hover:to-secondary-500 focus:ring-secondary-400 shadow-md shadow-secondary-500/20',
   outline: 'bg-transparent border border-gray-600 hover:bg-background-lighter focus:ring-gray-500 text-foreground',
   ghost: 'bg-transparent hover:bg-background-lighter focus:ring-gray-500 text-foreground',
-  danger: 'bg-error-600 text-white hover:bg-error-700 focus:ring-error-500',
+  danger: 'bg-gradient-to-r from-error-600 to-error-700 text-white hover:from-error-500 hover:to-error-600 focus:ring-error-500 shadow-md shadow-error-500/20',
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -41,9 +41,10 @@ export const Button: React.FC<ButtonProps> = ({
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center rounded-md font-medium transition-colors',
+        'inline-flex items-center justify-center rounded-md font-medium transition-all',
         'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background',
         'disabled:opacity-50 disabled:pointer-events-none',
+        'backdrop-blur-sm',
         variantClasses[variant],
         sizeClasses[size],
         className

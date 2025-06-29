@@ -23,6 +23,7 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastError, setToastError] = useState<string | null>(null);
+  const [scrolled, setScrolled] = useState(false);
   
   const showSidebarToggle = location.pathname !== '/' && 
                            !location.pathname.includes('/signin') && 
@@ -46,6 +47,23 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
       setShowToast(true);
     }
   }, [error]);
+
+  // Handle scroll effect
+  useEffect(() => {
+    const handleScroll = () => {
+      const offset = window.scrollY;
+      if (offset > 50) {
+        setScrolled(true);
+      } else {
+        setScrolled(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
 
   const handleSignOut = async () => {
     try {
@@ -83,21 +101,33 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
   });
   
   return (
-    <header className="fixed top-0 left-0 right-0 h-[var(--nav-height)] bg-background z-40 border-b border-background-lighter">
-      <div className="h-full px-4 md:px-6 flex items-center justify-between">
-        <div className="flex items-center">
+    <header 
+      className={`fixed top-0 left-0 right-0 h-[var(--nav-height)] z-40 transition-all duration-300 ${
+        scrolled 
+          ? 'bg-background/70 backdrop-blur-md border-b border-primary-500/20 shadow-lg shadow-primary-500/5' 
+          : 'bg-background/40 backdrop-blur-sm border-b border-background-lighter'
+      }`}
+    >
+      <div className="h-full px-4 md:px-6 flex items-center justify-between relative">
+        {/* Liquid morphism effect */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -inset-[100px] bg-primary-500/5 rounded-full blur-3xl opacity-50 animate-pulse"></div>
+          <div className="absolute top-0 right-0 w-96 h-96 bg-secondary-500/5 rounded-full blur-3xl opacity-30 animate-pulse" style={{ animationDuration: '8s' }}></div>
+        </div>
+        
+        <div className="flex items-center relative z-10">
           {showSidebarToggle && user && (
             <button 
               aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
               onClick={toggleSidebar}
-              className="p-2 mr-2 rounded-md hover:bg-background-lighter md:hidden"
+              className="p-2 mr-2 rounded-md hover:bg-white/10 transition-colors"
             >
               {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
           )}
           
           <Link to="/" className="flex items-center">
-            <div className="flex items-center justify-center bg-primary-600 h-9 w-9 rounded-md mr-2">
+            <div className="flex items-center justify-center bg-gradient-to-br from-primary-600 to-primary-800 h-9 w-9 rounded-md mr-2 shadow-lg shadow-primary-500/20">
               <Scissors size={20} className="text-white" />
             </div>
             <span className="text-xl font-bold bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent title-font">
@@ -106,7 +136,7 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
           </Link>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 relative z-10">
           {!initialized ? (
             <div className="flex items-center">
               <Loader2 size={20} className="animate-spin mr-2 text-primary-400" />
@@ -120,13 +150,13 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
           ) : user ? (
             <>
               {isLoadingSubscription ? (
-                <div className="w-12 h-6 bg-background-lighter rounded-full animate-pulse" />
+                <div className="w-12 h-6 bg-background-lighter/50 rounded-full animate-pulse" />
               ) : subscription && (
                 <Tooltip content={`${subscription.status === 'active' ? 'Active Pro Plan' : 'Free Plan'}`}>
                   <div className={`px-2 py-1 rounded-full text-xs font-medium ${
                     subscription.status === 'active' 
-                      ? 'bg-primary-900/30 text-primary-400'
-                      : 'bg-background-lighter text-foreground-muted'
+                      ? 'bg-gradient-to-r from-primary-900/50 to-primary-800/50 text-primary-400 border border-primary-500/30'
+                      : 'bg-background-lighter/50 text-foreground-muted backdrop-blur-sm'
                   }`}>
                     {subscription.status === 'active' ? 'Pro' : 'Free'}
                   </div>
@@ -136,9 +166,9 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
               <div className="relative">
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-2 p-2 rounded-md hover:bg-background-lighter transition-colors"
+                  className="flex items-center gap-2 p-2 rounded-md hover:bg-white/10 transition-colors"
                 >
-                  <div className="bg-background-lighter h-8 w-8 rounded-full flex items-center justify-center">
+                  <div className="bg-gradient-to-br from-primary-600/80 to-secondary-600/80 h-8 w-8 rounded-full flex items-center justify-center shadow-md">
                     {getUserInitial()}
                   </div>
                   <span className="hidden md:block text-sm font-medium">
@@ -152,11 +182,11 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
                       className="fixed inset-0 z-10" 
                       onClick={() => setShowUserMenu(false)}
                     />
-                    <div className="absolute right-0 top-full mt-2 w-64 bg-background-light border border-background-lighter rounded-lg shadow-lg z-20">
+                    <div className="absolute right-0 top-full mt-2 w-64 bg-background/80 backdrop-blur-md border border-primary-500/20 rounded-lg shadow-lg shadow-primary-500/10 z-20">
                       {/* User Info */}
                       <div className="px-4 py-3 border-b border-background-lighter">
                         <div className="flex items-center">
-                          <div className="bg-background-lighter h-10 w-10 rounded-full flex items-center justify-center mr-3">
+                          <div className="bg-gradient-to-br from-primary-600/80 to-secondary-600/80 h-10 w-10 rounded-full flex items-center justify-center mr-3 shadow-md">
                             {getUserInitial()}
                           </div>
                           <div>
@@ -173,7 +203,7 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
                             navigate('/settings');
                             setShowUserMenu(false);
                           }}
-                          className="w-full px-4 py-2 text-left hover:bg-background-lighter flex items-center transition-colors"
+                          className="w-full px-4 py-2 text-left hover:bg-white/10 flex items-center transition-colors"
                         >
                           <Settings size={16} className="mr-3" />
                           <span>Settings</span>
@@ -184,7 +214,7 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
                             navigate('/pricing');
                             setShowUserMenu(false);
                           }}
-                          className="w-full px-4 py-2 text-left hover:bg-background-lighter flex items-center transition-colors"
+                          className="w-full px-4 py-2 text-left hover:bg-white/10 flex items-center transition-colors"
                         >
                           <CreditCard size={16} className="mr-3" />
                           <span>Billing</span>
@@ -194,7 +224,7 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
                           <button
                             onClick={handleSignOut}
                             disabled={isSigningOut}
-                            className="w-full px-4 py-2 text-left hover:bg-background-lighter flex items-center text-error-500 transition-colors disabled:opacity-50"
+                            className="w-full px-4 py-2 text-left hover:bg-white/10 flex items-center text-error-500 transition-colors disabled:opacity-50"
                           >
                             {isSigningOut ? (
                               <Loader2 size={16} className="animate-spin mr-3" />
@@ -216,6 +246,7 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
                 variant="outline" 
                 size="sm"
                 onClick={() => navigate('/signin')}
+                className="bg-background/40 backdrop-blur-sm border-white/10 hover:bg-white/10 hover:border-white/20"
               >
                 Sign In
               </Button>
@@ -223,6 +254,7 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
                 variant="primary" 
                 size="sm"
                 onClick={() => navigate('/signup')}
+                className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-500 hover:to-primary-600 border-none shadow-md shadow-primary-500/20"
               >
                 Sign Up
               </Button>
