@@ -18,6 +18,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ mode }) => {
   const [error, setError] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState({ title: '', description: '', variant: 'default' as const });
+  const [emailConfirmationSent, setEmailConfirmationSent] = useState(false);
   
   const [formData, setFormData] = useState({
     email: '',
@@ -40,6 +41,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ mode }) => {
         );
 
         if (result.needsEmailConfirmation) {
+          setEmailConfirmationSent(true);
           setToastMessage({
             title: 'Check Your Email',
             description: 'We sent you a confirmation link. Please check your email and click the link to activate your account.',
@@ -107,6 +109,43 @@ const AuthForm: React.FC<AuthFormProps> = ({ mode }) => {
     const newPath = mode === 'signin' ? '/signup' : '/signin';
     navigate(newPath, { state: location.state });
   };
+
+  // Show email confirmation screen if needed
+  if (emailConfirmationSent) {
+    return (
+      <div className="w-full max-w-md mx-auto text-center">
+        <div className="flex justify-center mb-6">
+          <div className="bg-success-900/20 p-3 rounded-full">
+            <CheckCircle size={32} className="text-success-500" />
+          </div>
+        </div>
+        
+        <h2 className="text-2xl font-bold mb-4">Check your email</h2>
+        <p className="text-foreground-muted mb-8">
+          We've sent a confirmation link to <strong>{formData.email}</strong>. 
+          Please check your inbox and click the link to activate your account.
+        </p>
+        
+        <div className="space-y-4">
+          <Button
+            variant="primary"
+            onClick={() => navigate('/signin')}
+            className="w-full"
+          >
+            Go to Sign In
+          </Button>
+          
+          <Button
+            variant="outline"
+            onClick={() => setEmailConfirmationSent(false)}
+            className="w-full"
+          >
+            Back to Sign Up
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
