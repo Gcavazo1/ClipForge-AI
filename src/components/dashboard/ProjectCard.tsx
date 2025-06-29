@@ -1,8 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, Clock, Edit2, MoreVertical, Trash2 } from 'lucide-react';
+import { Play, Clock, Edit2, MoreVertical, Trash2, Film } from 'lucide-react';
 import { VideoProject } from '../../types';
-import { formatLongTime } from '../../lib/utils';
+import { formatLongTime, formatDate } from '../../lib/utils';
 import Button from '../ui/button';
 import Progress from '../ui/progress';
 
@@ -23,12 +23,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete }) => {
     onDelete(project.id);
   };
   
-  // Format the creation date
-  const formattedDate = new Date(project.createdAt).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  // Format the creation date - handle invalid dates gracefully
+  const formattedDate = project.createdAt ? 
+    formatDate(new Date(project.createdAt).getTime()) : 
+    'Unknown date';
   
   return (
     <div 
@@ -41,6 +39,14 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete }) => {
             src={project.thumbnailUrl} 
             alt={project.title} 
             className="w-full h-full object-cover"
+            onError={(e) => {
+              // If thumbnail fails to load, show placeholder
+              (e.target as HTMLImageElement).style.display = 'none';
+              (e.target as HTMLImageElement).parentElement?.classList.add('flex', 'items-center', 'justify-center');
+              const icon = document.createElement('div');
+              icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-foreground-muted"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M7 3v18" /><path d="M3 7.5h4" /><path d="M3 12h18" /><path d="M3 16.5h4" /><path d="M17 3v18" /><path d="M17 7.5h4" /><path d="M17 16.5h4" /></svg>';
+              (e.target as HTMLImageElement).parentElement?.appendChild(icon);
+            }}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-background-lighter">
@@ -49,10 +55,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete }) => {
         )}
         
         {/* Duration badge */}
-        <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs py-1 px-2 rounded">
-          <Clock size={12} className="inline mr-1" />
-          {formatLongTime(project.duration)}
-        </div>
+        {project.duration > 0 && (
+          <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs py-1 px-2 rounded">
+            <Clock size={12} className="inline mr-1" />
+            {formatLongTime(project.duration)}
+          </div>
+        )}
         
         {/* Play overlay */}
         <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -123,33 +131,6 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete }) => {
         </div>
       </div>
     </div>
-  );
-};
-
-// Import the Film component as it was not defined earlier
-const Film = (props: { size: number; className?: string }) => {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={props.size}
-      height={props.size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={props.className}
-    >
-      <rect width="18" height="18" x="3" y="3" rx="2" />
-      <path d="M7 3v18" />
-      <path d="M3 7.5h4" />
-      <path d="M3 12h18" />
-      <path d="M3 16.5h4" />
-      <path d="M17 3v18" />
-      <path d="M17 7.5h4" />
-      <path d="M17 16.5h4" />
-    </svg>
   );
 };
 

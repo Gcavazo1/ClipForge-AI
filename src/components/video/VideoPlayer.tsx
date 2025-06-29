@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatTime } from '../../lib/utils';
 import { TranscriptSegment } from '../../types';
+import { logger } from '../../lib/logger';
 
 interface VideoPlayerProps {
   src: string;
@@ -29,12 +30,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [duration, setDuration] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [currentCaption, setCurrentCaption] = useState<TranscriptSegment | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   // Sync playback state with props
   useEffect(() => {
     if (videoRef.current) {
       if (isPlaying) {
-        videoRef.current.play().catch(() => {
+        videoRef.current.play().catch((err) => {
+          logger.error('Video playback error', err);
           onPlayPause(false);
         });
       } else {
@@ -67,6 +71,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const handleMetadataLoaded = () => {
     if (videoRef.current) {
       setDuration(videoRef.current.duration);
+      setIsLoading(false);
     }
   };
   
@@ -148,8 +153,30 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }
   };
   
+  // Handle video error
+  const handleVideoError = () => {
+    setIsLoading(false);
+    setError('Failed to load video. Please check the URL and try again.');
+    logger.error('Video loading error', { src });
+  };
+  
   return (
     <div className="relative bg-black rounded-lg overflow-hidden group">
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background-lighter z-10">
+          <div className="animate-spin h-12 w-12 border-4 border-primary-500 rounded-full border-t-transparent"></div>
+        </div>
+      )}
+      
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background-lighter z-10">
+          <div className="text-center p-4">
+            <div className="text-error-500 mb-2">Error Loading Video</div>
+            <div className="text-sm text-foreground-muted">{error}</div>
+          </div>
+        </div>
+      )}
+      
       <video
         ref={videoRef}
         src={src}
@@ -157,10 +184,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleMetadataLoaded}
         onEnded={() => onPlayPause(false)}
+        onError={handleVideoError}
+        playsInline
       />
       
       {/* Caption overlay */}
-      {currentCaption && (
+      {currentCaption && showCaptions && (
         <div className="absolute bottom-16 left-0 right-0 text-center px-4">
           <div className="inline-block bg-black bg-opacity-70 text-white p-2 rounded-md text-sm max-w-md mx-auto">
             {currentCaption.text}
@@ -178,7 +207,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         >
           <div 
             className="absolute top-0 left-0 h-full bg-primary-500 rounded-full"
-            style={{ width: `${(currentTime / duration) * 100}%` }}
+            style={{ width: `${(currentTime / Math.max(duration, 0.1)) * 100}%` }}
           />
         </div>
         

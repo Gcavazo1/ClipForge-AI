@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Save, Download, ArrowLeft, Settings, CheckCircle2 } from 'lucide-react';
+import { Save, Download, ArrowLeft, Settings, CheckCircle2, Loader2 } from 'lucide-react';
 import Button from '../components/ui/button';
 import VideoPlayer from '../components/video/VideoPlayer';
 import Timeline from '../components/video/Timeline';
@@ -12,6 +12,7 @@ import { ClipSegment, ExportOptions } from '../types';
 import { mockProjects, mockTranscript, mockClipSegments } from '../lib/mockData';
 import { detectHighlights } from '../lib/utils';
 import { renderCaptionsOverlay } from '../lib/renderCaptionsOverlay';
+import { logger } from '../lib/logger';
 
 const EditorPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -43,15 +44,25 @@ const EditorPage: React.FC = () => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState({ title: '', description: '' });
   const [isExporting, setIsExporting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   // Load project data
   useEffect(() => {
+    setIsLoading(true);
+    setError(null);
+    
     if (projectId) {
+      logger.info('Loading project data', { projectId });
+      
+      // Find project in store
       const project = projects.find((p) => p.id === projectId);
       
       if (project) {
+        logger.info('Project found in store', { projectId });
         setCurrentProject(project);
         
+        // Load transcript and clips if needed
         if (transcript.length === 0) {
           setTranscript(mockTranscript);
         }
@@ -59,25 +70,35 @@ const EditorPage: React.FC = () => {
         if (clipSegments.length === 0) {
           setClipSegments(mockClipSegments);
         }
+        
+        setIsLoading(false);
       } else {
+        // Try to find in mock data
+        logger.info('Project not found in store, checking mock data', { projectId });
         const mockProject = mockProjects.find((p) => p.id === projectId);
         
         if (mockProject) {
           setCurrentProject(mockProject);
           setTranscript(mockTranscript);
           setClipSegments(mockClipSegments);
+          setIsLoading(false);
         } else {
-          navigate('/dashboard');
+          logger.error('Project not found', { projectId });
+          setError('Project not found');
+          setIsLoading(false);
         }
       }
     } else {
-      navigate('/dashboard');
+      logger.error('No project ID provided');
+      setError('No project ID provided');
+      setIsLoading(false);
     }
     
     return () => {
+      // Clean up
       setCurrentProject(null);
     };
-  }, [projectId, projects, navigate, setCurrentProject, setTranscript, setClipSegments, transcript.length, clipSegments.length]);
+  }, [projectId, projects, navigate, setCurrentProject, setTranscript, setClipSegments]);
   
   const selectedClip = clipSegments.find((clip) => clip.id === selectedClipId);
   
@@ -198,10 +219,30 @@ const EditorPage: React.FC = () => {
     }
   };
   
-  if (!currentProject) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-var(--nav-height))]">
-        <div className="animate-spin h-8 w-8 border-4 border-primary-500 rounded-full border-t-transparent"></div>
+        <div className="text-center">
+          <Loader2 size={32} className="animate-spin text-primary-500 mx-auto mb-4" />
+          <p className="text-foreground-muted">Loading editor...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (error || !currentProject) {
+    return (
+      <div className="max-w-6xl mx-auto py-8 px-4">
+        <div className="bg-error-900/20 text-error-500 p-6 rounded-lg text-center">
+          <h2 className="text-xl font-bold mb-4">Error Loading Project</h2>
+          <p className="mb-6">{error || 'Project not found or could not be loaded'}</p>
+          <Button
+            variant="primary"
+            onClick={() => navigate('/dashboard')}
+          >
+            Return to Dashboard
+          </Button>
+        </div>
       </div>
     );
   }
@@ -256,7 +297,7 @@ const EditorPage: React.FC = () => {
           />
           
           <Timeline
-            duration={currentProject.duration}
+            duration={currentProject.duration || 0}
             currentTime={currentTime}
             clipSegments={clipSegments}
             transcript={transcript}
@@ -285,7 +326,7 @@ const EditorPage: React.FC = () => {
               setCurrentTime(time);
               setIsPlaying(true);
             }}
-            duration={currentProject.duration}
+            duration={currentProject.duration || 0}
             onExport={handleExport}
           />
           

@@ -9,15 +9,26 @@ export function cn(...inputs: ClassValue[]) {
 
 // Format date using Intl API
 export function formatDate(timestamp: number): string {
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  }).format(new Date(timestamp));
+  if (isNaN(timestamp)) {
+    return 'Unknown date';
+  }
+  
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    }).format(new Date(timestamp));
+  } catch (error) {
+    console.error('Date formatting error:', error);
+    return 'Invalid date';
+  }
 }
 
 // Format time duration in seconds to MM:SS or HH:MM:SS
 export function formatTime(seconds: number): string {
+  if (isNaN(seconds)) return '00:00';
+  
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const remainingSeconds = Math.floor(seconds % 60);
@@ -162,4 +173,37 @@ export function detectHighlights(transcript: TranscriptSegment[]): Array<{
     .slice(0, 5); // Keep top 5 highlights
   
   return filteredHighlights;
+}
+
+// Get file extension from file name
+export function getFileExtension(fileName: string): string {
+  return fileName.split('.').pop()?.toLowerCase() || '';
+}
+
+// Get MIME type from file extension
+export function getMimeTypeFromExtension(extension: string): string {
+  const mimeTypes: Record<string, string> = {
+    'mp4': 'video/mp4',
+    'mov': 'video/quicktime',
+    'avi': 'video/x-msvideo',
+    'webm': 'video/webm',
+    'mkv': 'video/x-matroska',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp'
+  };
+  
+  return mimeTypes[extension] || 'application/octet-stream';
+}
+
+// Validate URL
+export function isValidUrl(url: string): boolean {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
 }

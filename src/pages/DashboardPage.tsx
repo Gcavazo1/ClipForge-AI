@@ -13,6 +13,17 @@ const DashboardPage: React.FC = () => {
   const projects = useAppStore((state) => state.projects);
   const addProject = useAppStore((state) => state.addProject);
   const removeProject = useAppStore((state) => state.removeProject);
+  const loadProjects = useAppStore((state) => state.loadProjects);
+  const user = useAppStore((state) => state.user);
+  
+  // Load projects when component mounts
+  useEffect(() => {
+    if (user) {
+      loadProjects().catch(error => {
+        logger.error('Failed to load projects', error as Error);
+      });
+    }
+  }, [user, loadProjects]);
   
   // Load mock projects if no projects exist
   useEffect(() => {
@@ -36,7 +47,7 @@ const DashboardPage: React.FC = () => {
   }, [projects.length, addProject]);
   
   const handleCreateNew = () => {
-    navigate('/');
+    navigate('/uploads');
   };
   
   const handleDelete = (id: string) => {
@@ -48,7 +59,7 @@ const DashboardPage: React.FC = () => {
     <div className="max-w-6xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Your Projects</h1>
+          <h1 className="text-2xl font-bold title-font">Your Projects</h1>
           <p className="text-foreground-muted">Manage your video projects and clips</p>
         </div>
         
