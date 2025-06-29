@@ -5,20 +5,26 @@ body {
 
 body {
   margin: 0;
-  position: absolute;
+  position: relative;
   width: 100%;
   height: 100%;
+  cursor: none;
 }
 
 #container {
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+  position: fixed;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .a-title {
@@ -31,6 +37,7 @@ body {
   mix-blend-mode: difference;
   filter: drop-shadow(2px 4px 6px black);
 }
+
 .a-second-title {
   position: absolute;
   margin-top: 25vh;
@@ -42,7 +49,15 @@ body {
   mix-blend-mode: color-dodge;
 }
 
-canvas {
-  width: 100%;
-  height: 100%;
+/* Make all buttons and interactive elements show a pointer cursor */
+button, a, [role="button"], input[type="button"], input[type="submit"], input[type="reset"], 
+.cursor-pointer, select, input[type="checkbox"], input[type="radio"] {
+  cursor: none !important;
+}
+
+/* Add a subtle highlight effect on hover for interactive elements */
+button:hover, a:hover, [role="button"]:hover, input[type="button"]:hover, 
+input[type="submit"]:hover, input[type="reset"]:hover, .cursor-pointer:hover {
+  filter: brightness(1.1);
+  transition: filter 0.2s ease;
 }

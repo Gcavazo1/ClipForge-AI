@@ -9,6 +9,7 @@ import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import MagicMouse from './components/common/MagicMouse';
 import CustomCursor from './components/common/CustomCursor';
+import './styles/magicMouse.css';
 
 // Lazy load pages for better performance
 const HomePage = withLazyLoading(() => import('./pages/HomePage'), 'Loading home page...');
@@ -59,9 +60,7 @@ function AppContent() {
 
   return (
     <>
-      <div id="magic-mouse-container">
-        <MagicMouse />
-      </div>
+      <MagicMouse />
       <CustomCursor />
       <Routes>
         {/* Public routes */}
