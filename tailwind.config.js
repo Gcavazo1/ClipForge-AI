@@ -86,6 +86,9 @@ export default {
         'nav-height': '64px',
         'sidebar-width': '240px',
       },
+      backgroundImage: {
+        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+      },
     },
   },
   plugins: [],
