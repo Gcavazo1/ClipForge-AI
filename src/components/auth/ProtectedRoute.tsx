@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { Loader2 } from 'lucide-react';
+import { logger } from '../../lib/logger';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -14,8 +15,17 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   requireAuth = true,
   redirectTo = '/signin'
 }) => {
-  const { user, loading, initialized } = useAuth();
+  const { user, loading, initialized, error } = useAuth();
   const location = useLocation();
+
+  logger.debug('ProtectedRoute render state', { 
+    path: location.pathname,
+    initialized,
+    loading,
+    hasUser: !!user,
+    requireAuth,
+    hasError: !!error
+  });
 
   // Show loading spinner while auth is initializing
   if (!initialized) {
@@ -43,12 +53,20 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // Redirect if auth is required but user is not authenticated
   if (requireAuth && !user) {
+    logger.info('Redirecting unauthenticated user', { 
+      from: location.pathname, 
+      to: redirectTo 
+    });
     return <Navigate to={redirectTo} state={{ from: location }} replace />;
   }
 
   // Redirect if user is authenticated but shouldn't be (e.g., on login page)
   if (!requireAuth && user) {
     const from = location.state?.from?.pathname || '/dashboard';
+    logger.info('Redirecting authenticated user', { 
+      from: location.pathname, 
+      to: from 
+    });
     return <Navigate to={from} replace />;
   }
 

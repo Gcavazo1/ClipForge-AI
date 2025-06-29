@@ -9,6 +9,7 @@ interface AuthState {
   session: Session | null;
   loading: boolean;
   initialized: boolean;
+  error: string | null;
 }
 
 export function useAuth() {
@@ -17,6 +18,7 @@ export function useAuth() {
     session: null,
     loading: true,
     initialized: false,
+    error: null
   });
 
   const setUser = useAppStore((state) => state.setUser);
@@ -46,6 +48,7 @@ export function useAuth() {
             session,
             loading: true, // Still loading profile
             initialized: true,
+            error: null
           });
           
           try {
@@ -149,6 +152,13 @@ export function useAuth() {
               },
               createdAt: session.user.created_at || new Date().toISOString()
             });
+            
+            if (mounted) {
+              setAuthState(prev => ({
+                ...prev,
+                error: 'Failed to load user profile'
+              }));
+            }
           } finally {
             // Always update loading state to false, regardless of profile loading success
             if (mounted) {
@@ -166,6 +176,7 @@ export function useAuth() {
             session: null,
             loading: false,
             initialized: true,
+            error: null
           });
           setUser(null);
         }
@@ -177,6 +188,7 @@ export function useAuth() {
             session: null,
             loading: false,
             initialized: true,
+            error: (error as Error).message
           });
           setUser(null);
         }
@@ -201,6 +213,7 @@ export function useAuth() {
           session,
           loading: true, // Still loading profile
           initialized: true,
+          error: null
         });
 
         try {
@@ -274,6 +287,13 @@ export function useAuth() {
             },
             createdAt: session.user.created_at || new Date().toISOString()
           });
+          
+          if (mounted) {
+            setAuthState(prev => ({
+              ...prev,
+              error: 'Failed to load user profile'
+            }));
+          }
         } finally {
           // Always update loading state to false, regardless of profile loading success
           if (mounted) {
@@ -291,6 +311,7 @@ export function useAuth() {
           session: null,
           loading: false,
           initialized: true,
+          error: null
         });
         setUser(null);
       }

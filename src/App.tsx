@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from './lib/error-handling/error-boundary';
@@ -7,6 +7,7 @@ import { withLazyLoading, preloadComponent } from './lib/performance/lazy-loadin
 import { useAuth } from './hooks/useAuth';
 import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import { logger } from './lib/logger';
 
 // Lazy load pages for better performance
 const HomePage = withLazyLoading(() => import('./pages/HomePage'), 'Loading home page...');
@@ -53,7 +54,15 @@ if (typeof window !== 'undefined') {
 
 function AppContent() {
   // Initialize auth state
-  useAuth();
+  const { initialized, loading, user } = useAuth();
+  
+  useEffect(() => {
+    logger.debug('App content rendered', { 
+      initialized, 
+      loading, 
+      isAuthenticated: !!user 
+    });
+  }, [initialized, loading, user]);
 
   return (
     <Routes>
@@ -115,9 +124,10 @@ function AppContent() {
 }
 
 function App() {
-  React.useEffect(() => {
+  useEffect(() => {
     // Setup global error handlers
     setupGlobalErrorHandlers();
+    logger.info('App initialized');
   }, []);
 
   return (

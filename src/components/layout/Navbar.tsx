@@ -18,11 +18,11 @@ interface NavbarProps {
 const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, loading, initialized } = useAuth();
+  const { user, loading, initialized, error } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [showToast, setShowToast] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [toastError, setToastError] = useState<string | null>(null);
   
   const showSidebarToggle = location.pathname !== '/' && 
                            !location.pathname.includes('/signin') && 
@@ -47,7 +47,7 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
       navigate('/');
     } catch (error) {
       logger.error('Sign out failed:', error as Error);
-      setError('Failed to sign out. Please try again.');
+      setToastError('Failed to sign out. Please try again.');
       setShowToast(true);
     } finally {
       setIsSigningOut(false);
@@ -223,9 +223,16 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
         </div>
       </div>
 
-      {showToast && error && (
+      {showToast && toastError && (
         <Toast open={showToast} onOpenChange={setShowToast} variant="error">
           <ToastTitle>Error</ToastTitle>
+          <ToastDescription>{toastError}</ToastDescription>
+        </Toast>
+      )}
+      
+      {error && !toastError && (
+        <Toast open={!!error} onOpenChange={() => setToastError(null)} variant="error">
+          <ToastTitle>Authentication Error</ToastTitle>
           <ToastDescription>{error}</ToastDescription>
         </Toast>
       )}
