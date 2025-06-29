@@ -32,7 +32,7 @@ export const updateProfileSchema = z.object({
   email: z.string().email('Invalid email address'),
   notifications: z.object({
     email: z.boolean(),
-    push: boolean,
+    push: z.boolean(),
   }),
 });
 
