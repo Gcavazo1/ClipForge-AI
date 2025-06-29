@@ -4,7 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from './lib/error-handling/error-boundary';
 import { setupGlobalErrorHandlers } from './lib/error-handling/error-reporter';
 import { withLazyLoading, preloadComponent } from './lib/performance/lazy-loading';
+import { useAuth } from './hooks/useAuth';
 import Layout from './components/layout/Layout';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 
 // Lazy load pages for better performance
 const HomePage = withLazyLoading(() => import('./pages/HomePage'), 'Loading home page...');
@@ -14,6 +16,9 @@ const AnalyticsPage = withLazyLoading(() => import('./pages/AnalyticsPage'), 'Lo
 const ProphecyPage = withLazyLoading(() => import('./pages/ProphecyPage'), 'Loading prophecy...');
 const PricingPage = withLazyLoading(() => import('./pages/PricingPage'), 'Loading pricing...');
 const SettingsPage = withLazyLoading(() => import('./pages/SettingsPage'), 'Loading settings...');
+const SignInPage = withLazyLoading(() => import('./pages/SignInPage'), 'Loading sign in...');
+const SignUpPage = withLazyLoading(() => import('./pages/SignUpPage'), 'Loading sign up...');
+const ResetPasswordPage = withLazyLoading(() => import('./pages/ResetPasswordPage'), 'Loading reset password...');
 const CheckoutSuccessPage = withLazyLoading(() => import('./pages/CheckoutSuccessPage'));
 const CheckoutCancelPage = withLazyLoading(() => import('./pages/CheckoutCancelPage'));
 const NotFoundPage = withLazyLoading(() => import('./pages/NotFoundPage'));
@@ -46,6 +51,69 @@ if (typeof window !== 'undefined') {
   preloadComponent(() => import('./pages/EditorPage'));
 }
 
+function AppContent() {
+  // Initialize auth state
+  useAuth();
+
+  return (
+    <Routes>
+      {/* Public routes */}
+      <Route path="/" element={<Layout />}>
+        <Route index element={<HomePage />} />
+        <Route path="pricing" element={<PricingPage />} />
+      </Route>
+
+      {/* Auth routes (redirect if already authenticated) */}
+      <Route path="/signin" element={<SignInPage />} />
+      <Route path="/signup" element={<SignUpPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+      {/* Protected routes */}
+      <Route path="/" element={<Layout />}>
+        <Route path="dashboard" element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        } />
+        <Route path="editor/:projectId?" element={
+          <ProtectedRoute>
+            <EditorPage />
+          </ProtectedRoute>
+        } />
+        <Route path="analytics" element={
+          <ProtectedRoute>
+            <AnalyticsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="prophecy" element={
+          <ProtectedRoute>
+            <ProphecyPage />
+          </ProtectedRoute>
+        } />
+        <Route path="settings" element={
+          <ProtectedRoute>
+            <SettingsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="checkout/success" element={
+          <ProtectedRoute>
+            <CheckoutSuccessPage />
+          </ProtectedRoute>
+        } />
+        <Route path="checkout/cancel" element={
+          <ProtectedRoute>
+            <CheckoutCancelPage />
+          </ProtectedRoute>
+        } />
+      </Route>
+
+      {/* Catch all routes */}
+      <Route path="/404" element={<NotFoundPage />} />
+      <Route path="*" element={<Navigate to="/404" replace />} />
+    </Routes>
+  );
+}
+
 function App() {
   React.useEffect(() => {
     // Setup global error handlers
@@ -55,21 +123,7 @@ function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<HomePage />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="editor/:projectId?" element={<EditorPage />} />
-            <Route path="analytics" element={<AnalyticsPage />} />
-            <Route path="prophecy" element={<ProphecyPage />} />
-            <Route path="pricing" element={<PricingPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-            <Route path="checkout/success" element={<CheckoutSuccessPage />} />
-            <Route path="checkout/cancel" element={<CheckoutCancelPage />} />
-            <Route path="404" element={<NotFoundPage />} />
-            <Route path="*" element={<Navigate to="/404" replace />} />
-          </Route>
-        </Routes>
+        <AppContent />
       </QueryClientProvider>
     </ErrorBoundary>
   );
