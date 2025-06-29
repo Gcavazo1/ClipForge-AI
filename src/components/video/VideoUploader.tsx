@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, Film, AlertCircle, Check, Clock, Zap, Wifi, WifiOff } from 'lucide-react';
+import { Upload, Film, AlertCircle, Check, Clock, Zap, Wifi, WifiOff, Loader2 } from 'lucide-react';
 import Button from '../ui/button';
 import Progress from '../ui/progress';
 import { VideoProject } from '../../types';
