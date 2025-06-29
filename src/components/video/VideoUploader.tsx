@@ -1,12 +1,13 @@
 import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, Film, AlertCircle, Check } from 'lucide-react';
+import { Upload, Film, AlertCircle, Check, Clock, Zap } from 'lucide-react';
 import Button from '../ui/button';
 import Progress from '../ui/progress';
 import { VideoProject } from '../../types';
 import { generateId } from '../../lib/utils';
-import { StorageService } from '../../lib/storage';
 import { VideoProjectService } from '../../lib/database';
+import { VideoProcessingService } from '../../lib/video-processing';
+import { AIServiceIntegration } from '../../lib/ai/ai-service-integration';
 import { useAppStore } from '../../store';
 import { logger } from '../../lib/logger';
 
@@ -14,19 +15,68 @@ interface VideoUploaderProps {
   onUploadComplete: (project: VideoProject) => void;
 }
 
+interface ProcessingStage {
+  name: string;
+  progress: number;
+  status: 'pending' | 'active' | 'completed' | 'error';
+  icon: React.ReactNode;
+}
+
 const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [fileSize, setFileSize] = useState<number | null>(null);
+  const [currentProject, setCurrentProject] = useState<VideoProject | null>(null);
+  const [processingStages, setProcessingStages] = useState<ProcessingStage[]>([]);
+  const [estimatedTime, setEstimatedTime] = useState<number | null>(null);
   
   const user = useAppStore((state) => state.user);
+  const isUploading = useAppStore((state) => state.isUploading);
+  const isTranscribing = useAppStore((state) => state.isTranscribing);
   const setUploadState = useAppStore((state) => state.setUploadState);
   const setTranscribeState = useAppStore((state) => state.setTranscribeState);
-  const isUploading = useAppStore((state) => state.isUploading);
-  const uploadProgress = useAppStore((state) => state.uploadProgress);
-  const isTranscribing = useAppStore((state) => state.isTranscribing);
-  const transcribeProgress = useAppStore((state) => state.transcribeProgress);
   
+  const initializeProcessingStages = (): ProcessingStage[] => [
+    {
+      name: 'Uploading video',
+      progress: 0,
+      status: 'pending',
+      icon: <Upload size={16} />
+    },
+    {
+      name: 'Processing video',
+      progress: 0,
+      status: 'pending',
+      icon: <Film size={16} />
+    },
+    {
+      name: 'Extracting audio',
+      progress: 0,
+      status: 'pending',
+      icon: <Zap size={16} />
+    },
+    {
+      name: 'Transcribing content',
+      progress: 0,
+      status: 'pending',
+      icon: <Clock size={16} />
+    },
+    {
+      name: 'Analyzing highlights',
+      progress: 0,
+      status: 'pending',
+      icon: <Zap size={16} />
+    }
+  ];
+
+  const updateStage = (stageIndex: number, progress: number, status?: ProcessingStage['status']) => {
+    setProcessingStages(prev => prev.map((stage, index) => 
+      index === stageIndex 
+        ? { ...stage, progress, status: status || (progress === 100 ? 'completed' : 'active') }
+        : stage
+    ));
+  };
+
   const handleUpload = useCallback(async (file: File) => {
     if (!user) {
       setError('Please sign in to upload videos');
@@ -36,20 +86,21 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
     setError(null);
     setFileName(file.name);
     setFileSize(file.size);
+    setProcessingStages(initializeProcessingStages());
     
     // Validate file
-    const validation = StorageService.validateFile(file, 'video');
+    const validation = VideoProcessingService.validateVideo(file);
     if (!validation.valid) {
       setError(validation.error || 'Invalid file');
       return;
     }
-    
+
+    // Get processing estimate
+    const estimate = AIServiceIntegration.estimateProcessing(file);
+    setEstimatedTime(estimate.estimatedTime);
+
     try {
-      // Start upload
-      setUploadState(true, 0);
-      logger.info('Starting video upload', { fileName: file.name, size: file.size });
-      
-      // Create project record first
+      // Stage 1: Create project record
       const projectId = generateId();
       const newProject: VideoProject = {
         id: projectId,
@@ -64,93 +115,134 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
         size: file.size,
       };
 
-      // Create project in database
       const createdProject = await VideoProjectService.create(newProject);
+      setCurrentProject(createdProject);
       
-      // Upload video file
-      const uploadResult = await StorageService.uploadVideo(
-        file, 
-        user.id, 
-        (progress) => setUploadState(true, progress)
+      // Stage 2: Upload and process video
+      updateStage(0, 0, 'active');
+      setUploadState(true, 0);
+      
+      const processingResult = await VideoProcessingService.processVideo(
+        file,
+        user.id,
+        {
+          generateThumbnail: true,
+          thumbnailTimestamp: 1,
+          quality: 'high'
+        },
+        (progress) => {
+          updateStage(0, progress);
+          setUploadState(true, progress);
+        }
       );
-      
-      // Generate and upload thumbnail
-      let thumbnailUrl = '';
-      try {
-        const thumbnailFile = await StorageService.generateThumbnail(file, 1);
-        const thumbnailResult = await StorageService.uploadThumbnail(thumbnailFile, user.id);
-        thumbnailUrl = thumbnailResult.publicUrl || thumbnailResult.url;
-      } catch (thumbnailError) {
-        logger.warn('Thumbnail generation failed', thumbnailError as Error);
-        // Continue without thumbnail
-      }
-      
-      // Get video duration
-      const duration = await getVideoDuration(file);
-      
-      // Update project with file details
+
+      updateStage(0, 100, 'completed');
+      updateStage(1, 100, 'completed');
+      setUploadState(false);
+
+      // Update project with video details
       const updatedProject = await VideoProjectService.update(createdProject.id, {
         ...createdProject,
-        videoUrl: uploadResult.url,
-        thumbnailUrl,
-        duration,
+        videoUrl: processingResult.processedVideoUrl,
+        thumbnailUrl: processingResult.thumbnailUrl,
+        duration: processingResult.duration,
         status: 'processing',
+        progress: 40
+      });
+
+      setCurrentProject(updatedProject);
+
+      // Stage 3: AI Processing Pipeline
+      updateStage(2, 0, 'active');
+      setTranscribeState(true, 0);
+
+      const aiResult = await AIServiceIntegration.processVideoWithAI(
+        {
+          projectId: updatedProject.id,
+          videoFile: file,
+          userId: user.id,
+          options: {
+            transcriptionProvider: 'openai',
+            analysisProvider: 'groq',
+            language: 'en',
+            generateHighlights: true,
+            autoCreateClips: true
+          }
+        },
+        (stage, progress) => {
+          // Map AI stages to our processing stages
+          switch (stage) {
+            case 'Extracting audio':
+              updateStage(2, progress);
+              break;
+            case 'Transcribing audio':
+            case 'Processing transcription':
+              updateStage(3, progress);
+              break;
+            case 'Analyzing highlights':
+            case 'Creating highlight clips':
+              updateStage(4, progress);
+              break;
+          }
+          setTranscribeState(true, progress);
+        }
+      );
+
+      // Complete all stages
+      updateStage(2, 100, 'completed');
+      updateStage(3, 100, 'completed');
+      updateStage(4, 100, 'completed');
+      setTranscribeState(false);
+
+      // Final project update
+      const finalProject = await VideoProjectService.updateStatus(
+        updatedProject.id,
+        'ready',
+        100
+      );
+
+      logger.info('Video upload and processing completed', {
+        projectId: updatedProject.id,
+        transcriptSegments: aiResult.transcript.length,
+        highlights: aiResult.highlights.length,
+        processingTime: aiResult.processingTime
+      });
+
+      // Call completion callback
+      onUploadComplete({
+        ...updatedProject,
+        status: 'ready',
         progress: 100
       });
-      
-      setUploadState(false);
-      
-      // Start transcription process
-      setTranscribeState(true, 0);
-      
-      // Update project status to transcribing
-      await VideoProjectService.updateStatus(updatedProject.id, 'transcribing', 0);
-      
-      // Simulate transcription progress (replace with real implementation)
-      const transcribeInterval = setInterval(() => {
-        setTranscribeState(true, (prev) => {
-          const newProgress = prev + Math.random() * 10;
-          if (newProgress >= 100) {
-            clearInterval(transcribeInterval);
-            return 100;
-          }
-          return newProgress;
-        });
-      }, 500);
-      
-      // Complete transcription (mock)
-      setTimeout(async () => {
-        clearInterval(transcribeInterval);
-        setTranscribeState(false, 100);
-        
-        // Update project status to ready
-        const finalProject = await VideoProjectService.updateStatus(
-          updatedProject.id, 
-          'ready', 
-          100
-        );
-        
-        // Reset states
-        setUploadState(false);
-        setTranscribeState(false);
-        
-        // Call completion callback
-        onUploadComplete({
-          ...updatedProject,
-          status: 'ready',
-          progress: 100
-        });
-        
-        logger.info('Video upload and processing completed', { projectId: updatedProject.id });
-      }, 3000);
-      
-    } catch (uploadError) {
-      logger.error('Video upload failed', uploadError as Error);
-      setError('Upload failed. Please try again.');
+
+      // Reset states
       setUploadState(false);
       setTranscribeState(false);
+      
+    } catch (uploadError) {
+      logger.error('Video upload and processing failed', uploadError as Error);
+      
+      // Update failed stage
+      const activeStageIndex = processingStages.findIndex(s => s.status === 'active');
+      if (activeStageIndex >= 0) {
+        updateStage(activeStageIndex, 0, 'error');
+      }
+      
+      setError('Upload and processing failed. Please try again.');
+      setUploadState(false);
+      setTranscribeState(false);
+
+      // Update project status if it was created
+      if (currentProject) {
+        await VideoProjectService.updateStatus(
+          currentProject.id,
+          'error',
+          0,
+          uploadError instanceof Error ? uploadError.message : 'Unknown error'
+        );
+      }
     }
-  }, [user, onUploadComplete, setUploadState, setTranscribeState]);
+  }, [user, onUploadComplete, setUploadState, setTranscribeState, processingStages, currentProject]);
   
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => {
@@ -167,6 +259,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
       'video/webm': ['.webm'],
     },
     maxSize: 500 * 1024 * 1024, // 500MB
+    disabled: isUploading || isTranscribing
   });
   
   const formatFileSize = (bytes: number) => {
@@ -174,24 +267,20 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
-  
-  // Helper function to get video duration
-  const getVideoDuration = (file: File): Promise<number> => {
-    return new Promise((resolve, reject) => {
-      const video = document.createElement('video');
-      video.onloadedmetadata = () => {
-        resolve(video.duration);
-      };
-      video.onerror = () => {
-        reject(new Error('Failed to load video metadata'));
-      };
-      video.src = URL.createObjectURL(file);
-    });
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
   
   if (isUploading || isTranscribing) {
+    const activeStage = processingStages.find(s => s.status === 'active');
+    const completedStages = processingStages.filter(s => s.status === 'completed').length;
+    const totalProgress = (completedStages / processingStages.length) * 100;
+
     return (
-      <div className="border rounded-lg p-6">
+      <div className="border rounded-lg p-6 bg-background-light">
         <div className="flex items-center mb-4">
           <Film size={24} className="text-primary-500 mr-3" />
           <div className="flex-1 min-w-0">
@@ -202,24 +291,76 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
               <p className="text-xs text-foreground-muted">{formatFileSize(fileSize)}</p>
             )}
           </div>
-          {uploadProgress === 100 && transcribeProgress === 100 ? (
-            <Check size={20} className="text-success-500 ml-2" />
-          ) : (
-            <span className="text-sm font-medium ml-2">
-              {isTranscribing ? transcribeProgress.toFixed(0) : uploadProgress.toFixed(0)}%
-            </span>
-          )}
+          <div className="text-right text-sm">
+            <div className="font-medium">{Math.round(totalProgress)}%</div>
+            {estimatedTime && (
+              <div className="text-xs text-foreground-muted">
+                ~{formatTime(estimatedTime)} remaining
+              </div>
+            )}
+          </div>
         </div>
         
         <Progress 
-          value={isTranscribing ? transcribeProgress : uploadProgress}
-          variant={uploadProgress === 100 ? 'success' : 'primary'}
+          value={totalProgress}
+          variant="primary"
           size="md"
+          className="mb-4"
         />
-        
-        <p className="text-sm text-foreground-muted mt-4 text-center">
-          {isTranscribing ? 'Processing video and generating transcript...' : 'Uploading video...'}
-        </p>
+
+        {/* Processing stages */}
+        <div className="space-y-3">
+          {processingStages.map((stage, index) => (
+            <div key={index} className="flex items-center space-x-3">
+              <div className={`flex items-center justify-center w-6 h-6 rounded-full text-xs ${
+                stage.status === 'completed' ? 'bg-success-500 text-white' :
+                stage.status === 'active' ? 'bg-primary-500 text-white' :
+                stage.status === 'error' ? 'bg-error-500 text-white' :
+                'bg-background-lighter text-foreground-muted'
+              }`}>
+                {stage.status === 'completed' ? (
+                  <Check size={12} />
+                ) : stage.status === 'error' ? (
+                  <AlertCircle size={12} />
+                ) : (
+                  stage.icon
+                )}
+              </div>
+              
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <span className={`text-sm ${
+                    stage.status === 'active' ? 'text-foreground font-medium' :
+                    stage.status === 'completed' ? 'text-success-500' :
+                    stage.status === 'error' ? 'text-error-500' :
+                    'text-foreground-muted'
+                  }`}>
+                    {stage.name}
+                  </span>
+                  {stage.status === 'active' && (
+                    <span className="text-xs text-foreground-muted">
+                      {stage.progress}%
+                    </span>
+                  )}
+                </div>
+                
+                {stage.status === 'active' && (
+                  <Progress 
+                    value={stage.progress}
+                    size="sm"
+                    className="mt-1"
+                  />
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {activeStage && (
+          <p className="text-sm text-foreground-muted mt-4 text-center">
+            {activeStage.name}...
+          </p>
+        )}
       </div>
     );
   }

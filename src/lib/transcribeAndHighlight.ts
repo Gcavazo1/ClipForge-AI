@@ -1,6 +1,7 @@
 import { TranscriptSegment } from '../types';
 import { generateId } from './utils';
-import { aiService } from './ai/ai-service';
+import { AIServiceIntegration } from './ai/ai-service-integration';
+import { VideoProcessingService } from './video-processing';
 import { logger } from './logger';
 
 interface HighlightCandidate {
@@ -22,8 +23,8 @@ export async function transcribeAndHighlight(
   options = { 
     language: 'en', 
     diarization: true,
-    transcriptionProvider: 'openai',
-    analysisProvider: 'groq'
+    transcriptionProvider: 'openai' as const,
+    analysisProvider: 'groq' as const
   }
 ): Promise<TranscriptionResult> {
   console.log('Starting transcription process...', { file, options });
@@ -35,38 +36,46 @@ export async function transcribeAndHighlight(
       options
     });
 
-    // Use the AI service for transcription and analysis
-    const result = await aiService.transcribeAndAnalyze(file, {
-      transcription: {
+    // Check if AI services are available
+    const serviceStatus = AIServiceIntegration.getServiceStatus();
+    if (!serviceStatus.available) {
+      logger.warn('AI services not available, falling back to mock implementation');
+      return mockTranscribeAndHighlight(file);
+    }
+
+    // Extract audio from video
+    const audioFile = await VideoProcessingService.extractAudio(file);
+
+    // Use the AI service integration for transcription and analysis
+    const result = await AIServiceIntegration.processVideoWithAI({
+      projectId: generateId(), // Temporary ID for processing
+      videoFile: file,
+      userId: 'temp', // Temporary user ID
+      options: {
+        transcriptionProvider: options.transcriptionProvider,
+        analysisProvider: options.analysisProvider,
         language: options.language,
-        speakerDiarization: options.diarization,
-        wordTimestamps: true
-      },
-      analysis: {
-        platform: 'general',
-        targetDuration: 30,
-        contentType: 'general'
-      },
-      transcriptionProvider: options.transcriptionProvider,
-      analysisProvider: options.analysisProvider
+        generateHighlights: true,
+        autoCreateClips: false // Don't save to database in this context
+      }
     });
 
     // Convert AI service results to our format
-    const transcript: TranscriptSegment[] = result.transcript.segments.map(segment => ({
+    const transcript: TranscriptSegment[] = result.transcript.map(segment => ({
       id: generateId(),
-      startTime: segment.start,
-      endTime: segment.end,
+      startTime: segment.startTime,
+      endTime: segment.endTime,
       text: segment.text,
-      speakerId: segment.speaker || 'speaker1',
+      speakerId: segment.speakerId || 'speaker1',
       confidence: segment.confidence
     }));
 
-    const highlights: HighlightCandidate[] = result.analysis.highlights.map(highlight => ({
+    const highlights: HighlightCandidate[] = result.highlights.map(highlight => ({
       startTime: highlight.startTime,
       endTime: highlight.endTime,
       score: highlight.confidence,
-      summary: highlight.summary,
-      type: highlight.type as any
+      summary: highlight.summary || highlight.title || '',
+      type: mapHighlightType(highlight.type)
     }));
 
     // Select top highlights (sorted by confidence)
@@ -111,6 +120,22 @@ export async function transcribeAndHighlight(
     // Fallback to mock implementation if AI services fail
     logger.warn('Falling back to mock transcription due to AI service failure');
     return mockTranscribeAndHighlight(file);
+  }
+}
+
+// Helper function to map highlight types
+function mapHighlightType(type: string | undefined): HighlightCandidate['type'] {
+  switch (type) {
+    case 'hook':
+      return 'hook';
+    case 'insight':
+      return 'insight';
+    case 'cta':
+      return 'cta';
+    case 'emotion':
+      return 'emotion';
+    default:
+      return 'emotion';
   }
 }
 
