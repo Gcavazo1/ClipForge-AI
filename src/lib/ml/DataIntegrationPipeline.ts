@@ -2,6 +2,7 @@ import { supabase } from '../supabase';
 import { ClipAnalytics, ProphecyResult, ModelType } from '../../types';
 import { logger } from '../logger';
 import { FeatureExtractor } from './AdvancedProphecyEngine';
+import { advancedFeatureEngineering } from './AdvancedFeatureEngineering';
 
 export interface DataSource {
   name: string;
@@ -120,6 +121,39 @@ export class DataIntegrationPipeline {
         return false; // Simulated as unavailable for now
       }
     });
+
+    // YouTube data source (simulated)
+    this.dataSources.push({
+      name: 'youtube',
+      fetchData: async (userId: string, limit = 50) => {
+        try {
+          // In a real implementation, this would call the YouTube API
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Check if we have user-platform mapping
+          const { data: platformData, error: platformError } = await supabase
+            .from('user_platform_connections')
+            .select('platform_user_id, access_token')
+            .eq('user_id', userId)
+            .eq('platform', 'youtube')
+            .single();
+          
+          if (platformError || !platformData) {
+            return [];
+          }
+          
+          // Simulate YouTube data
+          return this.generateMockPlatformData(userId, 'youtube', limit);
+        } catch (error) {
+          logger.error('Failed to fetch YouTube analytics data', error as Error);
+          return [];
+        }
+      },
+      isAvailable: async () => {
+        // Check if YouTube API is configured
+        return false; // Simulated as unavailable for now
+      }
+    });
   }
 
   // Get available data sources
@@ -181,21 +215,8 @@ export class DataIntegrationPipeline {
   async extractFeaturesFromAnalytics(analytics: ClipAnalytics[]): Promise<any[]> {
     logger.info('Extracting features from analytics data', { count: analytics.length });
     
-    const features = [];
-    
-    for (const analytic of analytics) {
-      try {
-        const extractedFeatures = await this.featureExtractor.extractFeatures(analytic);
-        features.push(extractedFeatures);
-      } catch (error) {
-        logger.error('Failed to extract features for analytic', error as Error, {
-          analyticId: analytic.id
-        });
-        // Continue with other analytics
-      }
-    }
-    
-    return features;
+    // Use advanced feature engineering for better results
+    return advancedFeatureEngineering.extractAdvancedFeatures(analytics);
   }
 
   // Store prediction results
@@ -354,6 +375,85 @@ export class DataIntegrationPipeline {
   clearCache(): void {
     this.cache.clear();
     logger.debug('Data integration pipeline cache cleared');
+  }
+
+  // Connect to a new data source
+  async connectDataSource(
+    userId: string, 
+    platform: string, 
+    credentials: Record<string, string>
+  ): Promise<boolean> {
+    try {
+      logger.info('Connecting to data source', { userId, platform });
+      
+      // In a real implementation, this would authenticate with the platform API
+      // For this demo, we'll simulate success
+      
+      // Store connection in database
+      const { error } = await supabase
+        .from('user_platform_connections')
+        .upsert({
+          user_id: userId,
+          platform,
+          platform_user_id: credentials.userId || 'mock-user-id',
+          access_token: credentials.accessToken || 'mock-token',
+          refresh_token: credentials.refreshToken,
+          connected_at: new Date().toISOString()
+        });
+      
+      if (error) throw error;
+      
+      // Clear cache to force refresh
+      this.clearCache();
+      
+      logger.info('Data source connected successfully', { userId, platform });
+      return true;
+    } catch (error) {
+      logger.error('Failed to connect data source', error as Error, { userId, platform });
+      return false;
+    }
+  }
+
+  // Disconnect a data source
+  async disconnectDataSource(userId: string, platform: string): Promise<boolean> {
+    try {
+      logger.info('Disconnecting data source', { userId, platform });
+      
+      // Remove connection from database
+      const { error } = await supabase
+        .from('user_platform_connections')
+        .delete()
+        .eq('user_id', userId)
+        .eq('platform', platform);
+      
+      if (error) throw error;
+      
+      // Clear cache to force refresh
+      this.clearCache();
+      
+      logger.info('Data source disconnected successfully', { userId, platform });
+      return true;
+    } catch (error) {
+      logger.error('Failed to disconnect data source', error as Error, { userId, platform });
+      return false;
+    }
+  }
+
+  // Get connected data sources for a user
+  async getConnectedDataSources(userId: string): Promise<string[]> {
+    try {
+      const { data, error } = await supabase
+        .from('user_platform_connections')
+        .select('platform')
+        .eq('user_id', userId);
+      
+      if (error) throw error;
+      
+      return data.map(row => row.platform);
+    } catch (error) {
+      logger.error('Failed to get connected data sources', error as Error, { userId });
+      return [];
+    }
   }
 }
 

@@ -129,6 +129,15 @@ const ProphecyVisualizer: React.FC<ProphecyVisualizerProps> = ({
     default: '#a1a1aa' // foreground-muted
   };
 
+  // Prepare engagement radar data
+  const engagementData = [
+    { metric: 'Views', value: 80, fullMark: 100 },
+    { metric: 'Likes', value: 85, fullMark: 100 },
+    { metric: 'Comments', value: 75, fullMark: 100 },
+    { metric: 'Shares', value: 70, fullMark: 100 },
+    { metric: 'Watch Time', value: 90, fullMark: 100 }
+  ];
+
   return (
     <div className="bg-background-light rounded-lg p-6">
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -279,13 +288,7 @@ const ProphecyVisualizer: React.FC<ProphecyVisualizerProps> = ({
               <h4 className="text-sm font-medium mb-3">Engagement Potential</h4>
               <div className="h-32">
                 <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart outerRadius={60} data={[
-                    { metric: 'Views', value: 80 },
-                    { metric: 'Likes', value: 85 },
-                    { metric: 'Comments', value: 75 },
-                    { metric: 'Shares', value: 70 },
-                    { metric: 'Watch Time', value: 90 }
-                  ]}>
+                  <RadarChart outerRadius={60} data={engagementData}>
                     <PolarGrid stroke="#2a2a2a" />
                     <PolarAngleAxis dataKey="metric" stroke="#a1a1aa" />
                     <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#a1a1aa" />

@@ -4,9 +4,12 @@ import { Matrix } from 'ml-matrix';
 import { mean, standardDeviation } from 'ml-stat/array';
 import { ClipAnalytics, ProphecyResult } from '../../types';
 import { logger } from '../logger';
+import { XGBoostModel } from './XGBoostModel';
+import { HybridEnsembleModel } from './HybridEnsembleModel';
+import { advancedFeatureEngineering } from './AdvancedFeatureEngineering';
 
 // Define model types
-export type ModelType = 'linear' | 'randomForest' | 'ensemble' | 'xgboost';
+export type ModelType = 'linear' | 'randomForest' | 'ensemble' | 'xgboost' | 'hybrid';
 
 // Define feature types
 export interface ContentFeatures {
@@ -19,6 +22,7 @@ export interface ContentFeatures {
   paceScore: number;
   thumbnailQuality: number;
   titleQuality: number;
+  [key: string]: any; // Allow for dynamic properties from advanced feature engineering
 }
 
 export interface TemporalFeatures {
@@ -28,6 +32,7 @@ export interface TemporalFeatures {
   isHoliday: boolean;
   seasonality: number;
   monthOfYear: number;
+  [key: string]: any; // Allow for dynamic properties
 }
 
 export interface UserFeatures {
@@ -37,6 +42,7 @@ export interface UserFeatures {
   accountAge: number;
   niche: string;
   previousSuccessRate: number;
+  [key: string]: any; // Allow for dynamic properties
 }
 
 export interface PlatformFeatures {
@@ -44,6 +50,7 @@ export interface PlatformFeatures {
   algorithmTrend: number;
   competitionLevel: number;
   recommendationScore: number;
+  [key: string]: any; // Allow for dynamic properties
 }
 
 export interface ProphecyFeatures {
@@ -673,10 +680,138 @@ export class EnsembleModel implements PredictionModel {
   }
 }
 
+// Feature extractor class
+export class FeatureExtractor {
+  async extractFeatures(clipData: Partial<ClipAnalytics>): Promise<ProphecyFeatures> {
+    // In a real implementation, this would extract features from the clip data
+    // For this demo, we'll use mock features
+    
+    return {
+      content: this.extractContentFeatures(clipData),
+      temporal: this.extractTemporalFeatures(clipData),
+      user: this.extractUserFeatures(clipData),
+      platform: this.extractPlatformFeatures(clipData)
+    };
+  }
+  
+  private extractContentFeatures(clipData: Partial<ClipAnalytics>): ContentFeatures {
+    // Mock content features
+    return {
+      duration: clipData.watchTime || 30,
+      hasMusic: Math.random() > 0.3,
+      hasCaptions: Math.random() > 0.4,
+      topicCategory: this.getRandomTopic(),
+      sentimentScore: Math.random(),
+      contentComplexity: Math.random(),
+      paceScore: Math.random(),
+      thumbnailQuality: Math.random(),
+      titleQuality: Math.random()
+    };
+  }
+  
+  private extractTemporalFeatures(clipData: Partial<ClipAnalytics>): TemporalFeatures {
+    // Get current date or posted date
+    const date = clipData.postedAt ? new Date(clipData.postedAt) : new Date();
+    
+    return {
+      dayOfWeek: date.getDay(),
+      hourOfDay: date.getHours(),
+      isWeekend: date.getDay() === 0 || date.getDay() === 6,
+      isHoliday: this.isHoliday(date),
+      seasonality: this.calculateSeasonality(date),
+      monthOfYear: date.getMonth()
+    };
+  }
+  
+  private extractUserFeatures(clipData: Partial<ClipAnalytics>): UserFeatures {
+    // Mock user features
+    return {
+      followersCount: Math.floor(Math.random() * 10000) + 1000,
+      engagementRate: Math.random() * 0.1,
+      postFrequency: Math.floor(Math.random() * 7) + 1,
+      accountAge: Math.floor(Math.random() * 365) + 30,
+      niche: this.getRandomTopic(),
+      previousSuccessRate: Math.random()
+    };
+  }
+  
+  private extractPlatformFeatures(clipData: Partial<ClipAnalytics>): PlatformFeatures {
+    // Get platform or default to random
+    const platform = clipData.platform || this.getRandomPlatform();
+    
+    return {
+      platform,
+      algorithmTrend: Math.random(),
+      competitionLevel: Math.random(),
+      recommendationScore: Math.random()
+    };
+  }
+  
+  private getRandomTopic(): string {
+    const topics = [
+      'entertainment',
+      'education',
+      'lifestyle',
+      'gaming',
+      'tech',
+      'beauty',
+      'fitness',
+      'food',
+      'travel',
+      'business'
+    ];
+    
+    return topics[Math.floor(Math.random() * topics.length)];
+  }
+  
+  private getRandomPlatform(): string {
+    const platforms = ['tiktok', 'instagram', 'youtube', 'facebook', 'twitter'];
+    return platforms[Math.floor(Math.random() * platforms.length)];
+  }
+  
+  private isHoliday(date: Date): boolean {
+    // Simple holiday check for demo purposes
+    const month = date.getMonth();
+    const day = date.getDate();
+    
+    // Check for major US holidays
+    if (
+      (month === 0 && day === 1) || // New Year's Day
+      (month === 6 && day === 4) || // Independence Day
+      (month === 11 && day === 25)   // Christmas
+    ) {
+      return true;
+    }
+    
+    return false;
+  }
+  
+  private calculateSeasonality(date: Date): number {
+    // Simple seasonality calculation based on month
+    // Returns value between 0 and 1
+    const month = date.getMonth();
+    
+    // Peak seasons are summer and winter holidays
+    if (month >= 5 && month <= 7) {
+      // Summer peak
+      return 0.8;
+    } else if (month >= 10 && month <= 11) {
+      // Winter holiday peak
+      return 0.9;
+    } else if (month >= 2 && month <= 4) {
+      // Spring medium
+      return 0.6;
+    } else {
+      // Other months lower
+      return 0.4;
+    }
+  }
+}
+
 // Main Prophecy Engine that manages all models
 export class AdvancedProphecyEngine {
   private models: Map<ModelType, PredictionModel> = new Map();
-  private defaultModel: ModelType = 'ensemble';
+  private defaultModel: ModelType = 'hybrid';
   private featureExtractor: FeatureExtractor;
   
   constructor() {
@@ -691,16 +826,22 @@ export class AdvancedProphecyEngine {
     // Create individual models
     const linearModel = new LinearRegressionModel();
     const randomForestModel = new RandomForestModel();
+    const xgboostModel = new XGBoostModel();
     
     // Create ensemble model
     const ensembleModel = new EnsembleModel([linearModel, randomForestModel]);
     ensembleModel.addModel(linearModel, 0.3);
     ensembleModel.addModel(randomForestModel, 0.7);
     
+    // Create hybrid ensemble model with all models
+    const hybridModel = HybridEnsembleModel.createFullEnsemble();
+    
     // Add models to map
     this.models.set('linear', linearModel);
     this.models.set('randomForest', randomForestModel);
     this.models.set('ensemble', ensembleModel);
+    this.models.set('xgboost', xgboostModel);
+    this.models.set('hybrid', hybridModel);
     
     logger.info('Prophecy engine initialized with models', {
       modelCount: this.models.size,
@@ -708,7 +849,7 @@ export class AdvancedProphecyEngine {
     });
   }
   
-  async trainModels(analytics: ClipAnalytics[]): Promise<void> {
+  async trainModels(analytics: ClipAnalytics[], features?: ProphecyFeatures[]): Promise<void> {
     try {
       if (analytics.length === 0) {
         throw new Error('No analytics data for training');
@@ -716,15 +857,17 @@ export class AdvancedProphecyEngine {
       
       logger.info('Training prophecy models', { dataPoints: analytics.length });
       
-      // Extract features from analytics data
-      const features = await Promise.all(
-        analytics.map(analytic => this.featureExtractor.extractFeatures(analytic))
-      );
+      // Extract features from analytics data if not provided
+      let featuresList = features;
+      if (!featuresList) {
+        // Use advanced feature engineering
+        featuresList = await advancedFeatureEngineering.extractAdvancedFeatures(analytics);
+      }
       
       // Train each model
       for (const [type, model] of this.models.entries()) {
         try {
-          await model.train(analytics, features);
+          await model.train(analytics, featuresList);
           logger.info(`Model ${type} trained successfully`, {
             confidence: model.getConfidence()
           });
@@ -750,7 +893,8 @@ export class AdvancedProphecyEngine {
       }
       
       // Extract features for prediction
-      const features = await this.featureExtractor.extractFeatures(clipData);
+      // Use advanced feature engineering for better results
+      const features = await advancedFeatureEngineering.extractAdvancedFeatures([clipData])[0];
       
       // Make prediction
       const prediction = await model.predict(features);
@@ -768,8 +912,8 @@ export class AdvancedProphecyEngine {
   ): Promise<Record<ModelType, ProphecyResult>> {
     const results: Partial<Record<ModelType, ProphecyResult>> = {};
     
-    // Extract features once
-    const features = await this.featureExtractor.extractFeatures(clipData);
+    // Extract features once using advanced feature engineering
+    const features = (await advancedFeatureEngineering.extractAdvancedFeatures([clipData]))[0];
     
     // Predict with each model
     for (const [type, model] of this.models.entries()) {
@@ -1015,134 +1159,6 @@ export class AdvancedProphecyEngine {
     });
     
     return insights;
-  }
-}
-
-// Feature extractor class
-export class FeatureExtractor {
-  async extractFeatures(clipData: Partial<ClipAnalytics>): Promise<ProphecyFeatures> {
-    // In a real implementation, this would extract features from the clip data
-    // For this demo, we'll use mock features
-    
-    return {
-      content: this.extractContentFeatures(clipData),
-      temporal: this.extractTemporalFeatures(clipData),
-      user: this.extractUserFeatures(clipData),
-      platform: this.extractPlatformFeatures(clipData)
-    };
-  }
-  
-  private extractContentFeatures(clipData: Partial<ClipAnalytics>): ContentFeatures {
-    // Mock content features
-    return {
-      duration: clipData.watchTime || 30,
-      hasMusic: Math.random() > 0.3,
-      hasCaptions: Math.random() > 0.4,
-      topicCategory: this.getRandomTopic(),
-      sentimentScore: Math.random(),
-      contentComplexity: Math.random(),
-      paceScore: Math.random(),
-      thumbnailQuality: Math.random(),
-      titleQuality: Math.random()
-    };
-  }
-  
-  private extractTemporalFeatures(clipData: Partial<ClipAnalytics>): TemporalFeatures {
-    // Get current date or posted date
-    const date = clipData.postedAt ? new Date(clipData.postedAt) : new Date();
-    
-    return {
-      dayOfWeek: date.getDay(),
-      hourOfDay: date.getHours(),
-      isWeekend: date.getDay() === 0 || date.getDay() === 6,
-      isHoliday: this.isHoliday(date),
-      seasonality: this.calculateSeasonality(date),
-      monthOfYear: date.getMonth()
-    };
-  }
-  
-  private extractUserFeatures(clipData: Partial<ClipAnalytics>): UserFeatures {
-    // Mock user features
-    return {
-      followersCount: Math.floor(Math.random() * 10000) + 1000,
-      engagementRate: Math.random() * 0.1,
-      postFrequency: Math.floor(Math.random() * 7) + 1,
-      accountAge: Math.floor(Math.random() * 365) + 30,
-      niche: this.getRandomTopic(),
-      previousSuccessRate: Math.random()
-    };
-  }
-  
-  private extractPlatformFeatures(clipData: Partial<ClipAnalytics>): PlatformFeatures {
-    // Get platform or default to random
-    const platform = clipData.platform || this.getRandomPlatform();
-    
-    return {
-      platform,
-      algorithmTrend: Math.random(),
-      competitionLevel: Math.random(),
-      recommendationScore: Math.random()
-    };
-  }
-  
-  private getRandomTopic(): string {
-    const topics = [
-      'entertainment',
-      'education',
-      'lifestyle',
-      'gaming',
-      'tech',
-      'beauty',
-      'fitness',
-      'food',
-      'travel',
-      'business'
-    ];
-    
-    return topics[Math.floor(Math.random() * topics.length)];
-  }
-  
-  private getRandomPlatform(): string {
-    const platforms = ['tiktok', 'instagram', 'youtube', 'facebook', 'twitter'];
-    return platforms[Math.floor(Math.random() * platforms.length)];
-  }
-  
-  private isHoliday(date: Date): boolean {
-    // Simple holiday check for demo purposes
-    const month = date.getMonth();
-    const day = date.getDate();
-    
-    // Check for major US holidays
-    if (
-      (month === 0 && day === 1) || // New Year's Day
-      (month === 6 && day === 4) || // Independence Day
-      (month === 11 && day === 25)   // Christmas
-    ) {
-      return true;
-    }
-    
-    return false;
-  }
-  
-  private calculateSeasonality(date: Date): number {
-    // Simple seasonality calculation based on month
-    // Returns value between 0 and 1
-    const month = date.getMonth();
-    
-    // Peak seasons are summer and winter holidays
-    if (month >= 5 && month <= 7) {
-      // Summer peak
-      return 0.8;
-    } else if (month >= 10 && month <= 11) {
-      // Winter holiday peak
-      return 0.9;
-    } else if (month >= 2 && month <= 4) {
-      // Spring medium
-      return 0.6;
-    } else {
-      // Other months lower
-      return 0.4;
-    }
   }
 }
 
