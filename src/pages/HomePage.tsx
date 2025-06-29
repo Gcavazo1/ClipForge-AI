@@ -67,7 +67,7 @@ const HomePage: React.FC = () => {
           <source src="/public/BG.mp4" type="video/mp4" />
         </video>
         {/* Vignette overlay */}
-        <div className="absolute inset-0 bg-gradient-radial from-transparent via-background/70 to-background pointer-events-none"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(0,0,0,0.4)_0%,_rgba(0,0,0,0.88)_100%)]" />
       </div>
 
       <div className="max-w-6xl mx-auto relative z-10">
