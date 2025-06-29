@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, Scissors, LogOut, Settings, CreditCard, Loader2, AlertCircle } from 'lucide-react';
 import Button from '../ui/button';
@@ -38,6 +38,14 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
       logger.error('Failed to load subscription:', err as Error);
     }
   });
+
+  // Show error toast when auth error occurs
+  useEffect(() => {
+    if (error) {
+      setToastError(error);
+      setShowToast(true);
+    }
+  }, [error]);
 
   const handleSignOut = async () => {
     try {

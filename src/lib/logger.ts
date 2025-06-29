@@ -14,7 +14,9 @@ class Logger {
   private static instance: Logger;
   private isDevelopment = import.meta.env.DEV;
   private logBuffer: LogEntry[] = [];
-  private readonly BUFFER_SIZE = 100;
+  private readonly BUFFER_SIZE = 20;
+  private flushTimeout: number | null = null;
+  private isFlushPending = false;
 
   private constructor() {
     window.addEventListener('unload', () => this.flushLogs());
@@ -28,8 +30,13 @@ class Logger {
   }
 
   private async getCurrentUser() {
-    const { data: { user } } = await supabase.auth.getUser();
-    return user?.id;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      return user?.id;
+    } catch (error) {
+      console.error('Failed to get current user for logging:', error);
+      return undefined;
+    }
   }
 
   private formatMessage(level: LogLevel, message: string, context?: Record<string, any>): string {
@@ -54,6 +61,14 @@ class Logger {
 
     if (this.logBuffer.length >= this.BUFFER_SIZE) {
       await this.flushLogs();
+    } else if (!this.isFlushPending) {
+      // Schedule a flush after 5 seconds if not already scheduled
+      this.isFlushPending = true;
+      this.flushTimeout = window.setTimeout(() => {
+        this.flushLogs();
+        this.isFlushPending = false;
+        this.flushTimeout = null;
+      }, 5000);
     }
   }
 
@@ -67,9 +82,9 @@ class Logger {
 
       if (error) {
         console.error('Failed to persist logs:', error);
+      } else {
+        this.logBuffer = [];
       }
-
-      this.logBuffer = [];
     } catch (error) {
       console.error('Error flushing logs:', error);
     }

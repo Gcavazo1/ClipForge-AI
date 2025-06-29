@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, onAuthStateChange, getCurrentUser, createUserProfileManually } from '../lib/auth';
 import { useAppStore } from '../store';
@@ -23,6 +23,7 @@ export function useAuth() {
 
   const setUser = useAppStore((state) => state.setUser);
   const loadUserProfile = useAppStore((state) => state.loadUserProfile);
+  const authInitialized = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -30,6 +31,14 @@ export function useAuth() {
 
     // Initialize auth state
     const initializeAuth = async () => {
+      // Prevent multiple initializations
+      if (authInitialized.current) {
+        logger.debug('Auth already initialized, skipping');
+        return;
+      }
+      
+      authInitialized.current = true;
+      
       try {
         logger.info('Starting auth initialization');
         const { data: { session } } = await supabase.auth.getSession();
@@ -79,6 +88,8 @@ export function useAuth() {
 
               // Load additional profile data
               await loadUserProfile();
+              
+              logger.info('User profile loaded successfully', { userId: currentUser.id });
             } else {
               // User exists but no profile - create one
               logger.warn('User authenticated but no profile found, creating profile', { userId: session.user.id });
@@ -208,13 +219,14 @@ export function useAuth() {
 
       if (session?.user) {
         // Set basic auth state immediately
-        setAuthState({
+        setAuthState(prev => ({
+          ...prev,
           user: session.user,
           session,
           loading: true, // Still loading profile
           initialized: true,
           error: null
-        });
+        }));
 
         try {
           logger.info('Fetching user profile after auth state change', { userId: session.user.id });
@@ -240,6 +252,9 @@ export function useAuth() {
               },
               createdAt: currentUser.created_at
             });
+            
+            // Load additional profile data
+            await loadUserProfile();
           } else {
             // User exists but no profile - create one
             logger.warn('User authenticated but no profile found on state change', { userId: session.user.id });
@@ -321,6 +336,7 @@ export function useAuth() {
       logger.info('useAuth hook cleanup');
       mounted = false;
       subscription.unsubscribe();
+      authInitialized.current = false;
     };
   }, [setUser, loadUserProfile]);
 
