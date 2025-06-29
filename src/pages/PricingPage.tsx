@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import Button from '../components/ui/button';
-import MagicText from '../components/ui/magic-text';
 import { STRIPE_PRODUCTS } from '../stripe-config';
 import { createCheckoutSession } from '../lib/stripe';
 import { useAppStore } from '../store';
@@ -41,13 +40,7 @@ const PricingPage: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto py-16 px-4">
       <div className="text-center mb-12">
-        <MagicText 
-          as="h1" 
-          className="text-4xl font-bold mb-4"
-          starCount={4}
-        >
-          Choose Your Plan
-        </MagicText>
+        <h1 className="text-4xl font-bold mb-4">Choose Your Plan</h1>
         <p className="text-foreground-muted max-w-2xl mx-auto">
           Select the perfect plan for your content creation needs
         </p>
@@ -60,13 +53,7 @@ const PricingPage: React.FC = () => {
             className="bg-background-light rounded-lg p-6 border-2 border-background-lighter hover:border-primary-500 transition-colors"
           >
             <div className="text-center mb-6">
-              <MagicText 
-                as="h2" 
-                className="text-2xl font-bold mb-2"
-                starCount={2}
-              >
-                {product.name}
-              </MagicText>
+              <h2 className="text-2xl font-bold mb-2">{product.name}</h2>
               <p className="text-foreground-muted mb-4">{product.description}</p>
               <div className="text-3xl font-bold">
                 {key === 'FREE' ? (
