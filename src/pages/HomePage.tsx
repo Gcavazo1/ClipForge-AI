@@ -64,18 +64,10 @@ const HomePage: React.FC = () => {
           playsInline
           className="absolute min-w-full min-h-full object-cover w-auto h-auto"
         >
-          <div className="relative min-h-screen overflow-hidden">
-      {/* Video Background */}
-      <div className="fixed inset-0 z-0">
-        <video 
-          autoPlay 
-          loop 
-          muted 
-          className="w-full h-full object-cover"
-        >
-          <source src="/video/BG.mp4" type="video/mp4" />
+          <source src="/public/BG.mp4" type="video/mp4" />
         </video>
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(0,0,0,0.4)_0%,_rgba(0,0,0,0.88)_100%)]" />
+        {/* Vignette overlay */}
+        <div className="absolute inset-0 bg-gradient-radial from-transparent via-background/70 to-background pointer-events-none"></div>
       </div>
 
       <div className="max-w-6xl mx-auto relative z-10">
