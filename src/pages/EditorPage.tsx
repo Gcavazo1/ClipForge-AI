@@ -62,33 +62,7 @@ const EditorPage: React.FC = () => {
         
         logger.info('Loading project data', { projectId });
         
-        // Try to load from database first
-        if (projectId) {
-          try {
-            const project = await VideoProjectService.getById(projectId);
-            if (project) {
-              logger.info('Project loaded from database', { projectId });
-              setCurrentProject(project);
-              
-              // Load transcript and clips if needed
-              if (transcript.length === 0) {
-                setTranscript(mockTranscript);
-              }
-              
-              if (clipSegments.length === 0) {
-                setClipSegments(mockClipSegments);
-              }
-              
-              setIsLoading(false);
-              return;
-            }
-          } catch (dbError) {
-            logger.warn('Failed to load project from database', dbError as Error);
-            // Continue to try loading from store
-          }
-        }
-        
-        // Find project in store
+        // Try to find project in store first
         const project = projects.find((p) => p.id === projectId);
         
         if (project) {
@@ -105,32 +79,59 @@ const EditorPage: React.FC = () => {
           }
           
           setIsLoading(false);
+          return;
+        }
+        
+        // If not in store, try to load from database
+        try {
+          if (projectId) {
+            const dbProject = await VideoProjectService.getById(projectId);
+            if (dbProject) {
+              logger.info('Project loaded from database', { projectId });
+              setCurrentProject(dbProject);
+              
+              // Load transcript and clips if needed
+              if (transcript.length === 0) {
+                setTranscript(mockTranscript);
+              }
+              
+              if (clipSegments.length === 0) {
+                setClipSegments(mockClipSegments);
+              }
+              
+              setIsLoading(false);
+              return;
+            }
+          }
+        } catch (dbError) {
+          logger.warn('Failed to load project from database', dbError as Error);
+          // Continue to try loading from mock data
+        }
+        
+        // Try to find in mock data
+        logger.info('Project not found in store or database, checking mock data', { projectId });
+        const mockProject = mockProjects.find((p) => p.id === projectId);
+        
+        if (mockProject) {
+          setCurrentProject(mockProject);
+          setTranscript(mockTranscript);
+          setClipSegments(mockClipSegments);
+          setIsLoading(false);
         } else {
-          // Try to find in mock data
-          logger.info('Project not found in store, checking mock data', { projectId });
-          const mockProject = mockProjects.find((p) => p.id === projectId);
+          // Try to load all projects in case it hasn't been loaded yet
+          await loadProjects();
           
-          if (mockProject) {
-            setCurrentProject(mockProject);
+          // Check again after loading
+          const refreshedProject = projects.find((p) => p.id === projectId);
+          if (refreshedProject) {
+            setCurrentProject(refreshedProject);
             setTranscript(mockTranscript);
             setClipSegments(mockClipSegments);
             setIsLoading(false);
           } else {
-            // Try to load all projects in case it hasn't been loaded yet
-            await loadProjects();
-            
-            // Check again after loading
-            const refreshedProject = projects.find((p) => p.id === projectId);
-            if (refreshedProject) {
-              setCurrentProject(refreshedProject);
-              setTranscript(mockTranscript);
-              setClipSegments(mockClipSegments);
-              setIsLoading(false);
-            } else {
-              logger.error('Project not found', { projectId });
-              setError('Project not found');
-              setIsLoading(false);
-            }
+            logger.error('Project not found', { projectId });
+            setError('Project not found');
+            setIsLoading(false);
           }
         }
       } catch (error) {
@@ -146,7 +147,7 @@ const EditorPage: React.FC = () => {
       // Clean up
       setCurrentProject(null);
     };
-  }, [projectId, projects, navigate, setCurrentProject, setTranscript, setClipSegments, loadProjects]);
+  }, [projectId, projects, navigate, setCurrentProject, setTranscript, setClipSegments, loadProjects, transcript.length, clipSegments.length]);
   
   const selectedClip = clipSegments.find((clip) => clip.id === selectedClipId);
   

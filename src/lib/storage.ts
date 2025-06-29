@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { logger } from './logger';
+import { getMimeTypeFromExtension, getFileExtension } from './utils';
 
 export interface UploadResult {
   id: string;
@@ -29,12 +30,17 @@ export class StorageService {
 
       logger.info('Starting video upload', { fileName, size: file.size });
 
+      // Ensure we have a valid content type
+      const contentType = file.type || getMimeTypeFromExtension(getFileExtension(file.name));
+      
+      logger.info('Using content type for upload', { contentType, fileName });
+
       const { data, error } = await supabase.storage
         .from('videos')
         .upload(fileName, file, {
           cacheControl: '3600',
           upsert: false,
-          contentType: file.type, // Explicitly set content type
+          contentType, // Explicitly set content type
           onUploadProgress: (progress) => {
             const percentage = (progress.loaded / progress.total) * 100;
             onProgress?.(percentage);
@@ -53,7 +59,7 @@ export class StorageService {
         id: data.path,
         url: publicUrl,
         size: file.size,
-        type: file.type
+        type: contentType
       };
     } catch (error) {
       logger.error('Video upload failed', error as Error, { userId, fileName: file.name });
@@ -67,12 +73,15 @@ export class StorageService {
       const fileExt = file.name.split('.').pop();
       const fileName = `${userId}/${Date.now()}-thumbnail.${fileExt}`;
 
+      // Ensure we have a valid content type
+      const contentType = file.type || 'image/jpeg';
+
       const { data, error } = await supabase.storage
         .from('thumbnails')
         .upload(fileName, file, {
           cacheControl: '3600',
           upsert: false,
-          contentType: 'image/jpeg' // Explicitly set content type
+          contentType // Explicitly set content type
         });
 
       if (error) throw error;
@@ -86,7 +95,7 @@ export class StorageService {
         url: publicUrl,
         publicUrl,
         size: file.size,
-        type: file.type
+        type: contentType
       };
     } catch (error) {
       logger.error('Thumbnail upload failed', error as Error, { userId });
@@ -100,12 +109,15 @@ export class StorageService {
       const fileExt = file.name.split('.').pop();
       const fileName = `${userId}/exports/${clipId}-${Date.now()}.${fileExt}`;
 
+      // Ensure we have a valid content type
+      const contentType = file.type || 'video/mp4';
+
       const { data, error } = await supabase.storage
         .from('exports')
         .upload(fileName, file, {
           cacheControl: '3600',
           upsert: false,
-          contentType: file.type // Explicitly set content type
+          contentType // Explicitly set content type
         });
 
       if (error) throw error;
@@ -121,7 +133,7 @@ export class StorageService {
         id: data.path,
         url: signedUrlData.signedUrl,
         size: file.size,
-        type: file.type
+        type: contentType
       };
     } catch (error) {
       logger.error('Export upload failed', error as Error, { userId, clipId });
@@ -135,6 +147,9 @@ export class StorageService {
       const fileExt = file.name.split('.').pop();
       const fileName = `${userId}/avatar.${fileExt}`;
 
+      // Ensure we have a valid content type
+      const contentType = file.type || 'image/jpeg';
+
       // Delete existing avatar first
       await supabase.storage
         .from('avatars')
@@ -145,7 +160,7 @@ export class StorageService {
         .upload(fileName, file, {
           cacheControl: '3600',
           upsert: true,
-          contentType: file.type // Explicitly set content type
+          contentType // Explicitly set content type
         });
 
       if (error) throw error;
@@ -159,7 +174,7 @@ export class StorageService {
         url: publicUrl,
         publicUrl,
         size: file.size,
-        type: file.type
+        type: contentType
       };
     } catch (error) {
       logger.error('Avatar upload failed', error as Error, { userId });
@@ -259,10 +274,13 @@ export class StorageService {
       };
     }
 
-    if (!config.allowedTypes.includes(file.type)) {
+    // Check file type - if MIME type is not available, try to infer from extension
+    const fileType = file.type || getMimeTypeFromExtension(getFileExtension(file.name));
+    
+    if (!config.allowedTypes.includes(fileType)) {
       return {
         valid: false,
-        error: `File type ${file.type} is not allowed. Supported types: ${config.allowedTypes.join(', ')}`
+        error: `File type ${fileType} is not allowed. Supported types: ${config.allowedTypes.join(', ')}`
       };
     }
 

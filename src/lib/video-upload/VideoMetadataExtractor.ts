@@ -1,5 +1,6 @@
 import { logger } from '../logger';
 import { performanceMonitor } from '../performance/performance-monitor';
+import { getMimeTypeFromExtension, getFileExtension } from '../utils';
 
 export interface VideoMetadata {
   duration: number;
@@ -111,6 +112,16 @@ export class VideoMetadataExtractor {
     // If MIME type is not recognized but extension is valid, consider it valid
     const hasValidExtension = fileExt && validExtensions.includes(fileExt);
     const hasValidMimeType = validTypes.includes(file.type);
+    
+    // Get content type - either from file or inferred from extension
+    const contentType = file.type || (fileExt ? getMimeTypeFromExtension(fileExt) : '');
+    
+    logger.debug('Validating video file', { 
+      fileName: file.name, 
+      mimeType: file.type,
+      inferredType: contentType,
+      extension: fileExt
+    });
     
     if (!hasValidMimeType && !hasValidExtension) {
       return {

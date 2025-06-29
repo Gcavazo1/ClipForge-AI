@@ -6,6 +6,7 @@ import { VideoProject } from '../../types';
 import { logger } from '../logger';
 import { performanceMonitor } from '../performance/performance-monitor';
 import { generateId } from '../utils';
+import { getMimeTypeFromExtension, getFileExtension } from '../utils';
 
 export interface UploadOptions {
   title?: string;
@@ -107,7 +108,7 @@ export class VideoUploadService {
       fileName: file.name, 
       fileSize: file.size,
       userId,
-      mimeType: file.type
+      mimeType: file.type || getMimeTypeFromExtension(getFileExtension(file.name))
     });
     
     // Start processing the queue
@@ -225,10 +226,13 @@ export class VideoUploadService {
    */
   private async processUploadTask(task: UploadTask): Promise<void> {
     try {
+      // Ensure we have a valid content type
+      const contentType = task.file.type || getMimeTypeFromExtension(getFileExtension(task.file.name));
+      
       logger.info('Processing upload task', { 
         taskId: task.id, 
         fileName: task.file.name,
-        mimeType: task.file.type
+        mimeType: contentType
       });
       
       // Update task status

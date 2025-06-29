@@ -2,6 +2,7 @@ import { supabase } from '../supabase';
 import { logger } from '../logger';
 import { performanceMonitor } from '../performance/performance-monitor';
 import { RetryManager } from '../error-handling/retry-manager';
+import { getMimeTypeFromExtension, getFileExtension } from '../utils';
 
 export interface ChunkConfig {
   chunkSize: number;
@@ -86,22 +87,26 @@ export class ChunkedUploader {
       // Calculate total chunks
       const totalChunks = Math.ceil(this.file.size / this.config.chunkSize);
       
+      // Ensure we have a valid content type
+      const contentType = this.file.type || getMimeTypeFromExtension(fileExt);
+      
       logger.info('Starting chunked upload', { 
         fileName, 
         fileSize: this.file.size, 
         totalChunks,
         chunkSize: this.config.chunkSize,
-        concurrentUploads: this.config.concurrentUploads
+        concurrentUploads: this.config.concurrentUploads,
+        contentType
       });
 
       // For single chunk uploads, use direct upload
       if (totalChunks === 1) {
-        const result = await this.uploadSingleFile(fileName, onProgress);
+        const result = await this.uploadSingleFile(fileName, contentType, onProgress);
         return result;
       }
 
       // Upload all chunks
-      await this.uploadAllChunks(fileName, totalChunks, onProgress);
+      await this.uploadAllChunks(fileName, totalChunks, contentType, onProgress);
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
@@ -118,7 +123,7 @@ export class ChunkedUploader {
         path: fileName,
         url: publicUrl,
         size: this.file.size,
-        mimeType: this.file.type
+        mimeType: contentType
       };
     } catch (error) {
       logger.error('Chunked upload failed', error as Error, {
@@ -135,6 +140,7 @@ export class ChunkedUploader {
    */
   private async uploadSingleFile(
     fileName: string,
+    contentType: string,
     onProgress?: (progress: UploadProgress) => void
   ): Promise<UploadResult> {
     try {
@@ -143,7 +149,7 @@ export class ChunkedUploader {
         .upload(fileName, this.file, {
           cacheControl: '3600',
           upsert: false,
-          contentType: this.file.type, // Explicitly set content type
+          contentType, // Explicitly set content type
           onUploadProgress: (progress) => {
             if (onProgress) {
               const percentage = (progress.loaded / progress.total) * 100;
@@ -173,7 +179,7 @@ export class ChunkedUploader {
         path: data.path,
         url: publicUrl,
         size: this.file.size,
-        mimeType: this.file.type
+        mimeType: contentType
       };
     } catch (error) {
       logger.error('Single file upload failed', error as Error);
@@ -215,6 +221,7 @@ export class ChunkedUploader {
   private async uploadAllChunks(
     fileName: string, 
     totalChunks: number,
+    contentType: string,
     onProgress?: (progress: UploadProgress) => void
   ): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -266,7 +273,7 @@ export class ChunkedUploader {
         const end = Math.min(start + this.config.chunkSize, this.file.size);
         const chunk = this.file.slice(start, end);
 
-        this.uploadChunk(fileName, chunk, chunkIndex, totalChunks)
+        this.uploadChunk(fileName, chunk, chunkIndex, totalChunks, contentType)
           .then(() => {
             this.completedChunks.add(chunkIndex);
             this.activeChunks.delete(chunkIndex);
@@ -327,7 +334,8 @@ export class ChunkedUploader {
     fileName: string, 
     chunk: Blob, 
     chunkIndex: number,
-    totalChunks: number
+    totalChunks: number,
+    contentType: string
   ): Promise<void> {
     const chunkName = totalChunks > 1 
       ? `${fileName}.part${chunkIndex}` 
@@ -335,7 +343,7 @@ export class ChunkedUploader {
     
     // Create a File object from the Blob to preserve MIME type
     const chunkFile = new File([chunk], chunkName, { 
-      type: this.file.type // Use the original file's MIME type
+      type: contentType // Use the explicit content type
     });
     
     return RetryManager.withRetry(
@@ -349,7 +357,7 @@ export class ChunkedUploader {
           .upload(chunkName, chunkFile, {
             cacheControl: '3600',
             upsert: chunkIndex > 0 ? true : false, // Only allow upsert for chunks after the first
-            contentType: this.file.type // Explicitly set content type
+            contentType // Explicitly set content type
           });
 
         if (error) throw error;
