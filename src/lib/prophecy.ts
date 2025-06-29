@@ -1,6 +1,8 @@
 import { SimpleLinearRegression } from 'ml-regression-simple-linear';
 import { supabase } from './supabase';
 import { ProphecyRequest, ProphecyResult, ClipAnalytics } from '../types';
+import { advancedProphecyEngine, AdvancedProphecyEngine, ModelType } from './ml/AdvancedProphecyEngine';
+import { logger } from './logger';
 
 // Fetch historical analytics data for a user
 async function fetchUserAnalytics(userId: string): Promise<ClipAnalytics[]> {
@@ -133,70 +135,174 @@ function generateRecommendations(analytics: ClipAnalytics[]): string[] {
   return recommendations.slice(0, 3);
 }
 
-// Main prophecy generation function
-export async function generateProphecy(request: ProphecyRequest): Promise<ProphecyResult> {
-  const analytics = await fetchUserAnalytics(request.userId);
-  const baselineMetrics = calculateBaselineMetrics(analytics);
-  const predictions = predictMetrics(analytics) || {
-    views: baselineMetrics.avgViews * 1.1,
-    likes: baselineMetrics.avgLikes * 1.1,
-    comments: baselineMetrics.avgComments * 1.1,
-    confidence: 70,
-  };
+// Main prophecy generation function using advanced engine
+export async function generateProphecy(request: ProphecyRequest, modelType: ModelType = 'ensemble'): Promise<ProphecyResult> {
+  try {
+    logger.info('Generating prophecy', { 
+      userId: request.userId, 
+      clipId: request.clipId,
+      modelType
+    });
+    
+    // Fetch analytics data
+    const analytics = await fetchUserAnalytics(request.userId);
+    
+    // Check if we have enough data for advanced models
+    if (analytics.length >= 5) {
+      try {
+        // Train the advanced models
+        await advancedProphecyEngine.trainModels(analytics);
+        
+        // Generate prediction using the advanced engine
+        const clipData: Partial<ClipAnalytics> = {
+          userId: request.userId,
+          clipId: request.clipId,
+          platform: request.platform || 'tiktok',
+          postedAt: new Date().toISOString()
+        };
+        
+        const prediction = await advancedProphecyEngine.predict(clipData, modelType);
+        logger.info('Advanced prophecy generated successfully', { 
+          confidence: prediction.confidence,
+          modelType
+        });
+        
+        return prediction;
+      } catch (error) {
+        logger.error('Advanced prophecy generation failed, falling back to basic model', error as Error);
+        // Fall back to basic model
+      }
+    }
+    
+    // Fall back to basic model if advanced fails or not enough data
+    const baselineMetrics = calculateBaselineMetrics(analytics);
+    const predictions = predictMetrics(analytics) || {
+      views: baselineMetrics.avgViews * 1.1,
+      likes: baselineMetrics.avgLikes * 1.1,
+      comments: baselineMetrics.avgComments * 1.1,
+      confidence: 70,
+    };
 
-  // Simulate trending hashtags (replace with real API data later)
-  const trendingHashtags = [
-    'fyp',
-    'viral',
-    'trending',
-    'tutorial',
-    'howto',
-  ];
+    // Simulate trending hashtags (replace with real API data later)
+    const trendingHashtags = [
+      'fyp',
+      'viral',
+      'trending',
+      'tutorial',
+      'howto',
+    ];
 
-  return {
-    predictedViews: Math.round(predictions.views),
-    predictedLikes: Math.round(predictions.likes),
-    predictedComments: Math.round(predictions.comments),
-    confidence: predictions.confidence,
-    bestTime: determineOptimalTime(analytics),
-    bestDay: determineOptimalDay(analytics),
-    recommendedDuration: 45, // Default recommended duration
-    trendingHashtags,
-    recommendations: generateRecommendations(analytics),
-    insights: [
-      {
-        type: 'engagement',
-        message: 'Your engagement rate is trending upward',
-        confidence: 85,
-      },
-      {
-        type: 'timing',
-        message: 'Evening posts perform 25% better than morning posts',
-        confidence: 90,
-      },
-      {
-        type: 'content',
-        message: 'Tutorial-style content drives higher watch time',
-        confidence: 80,
-      },
-    ],
-  };
+    logger.info('Basic prophecy generated successfully', { 
+      confidence: predictions.confidence
+    });
+
+    return {
+      predictedViews: Math.round(predictions.views),
+      predictedLikes: Math.round(predictions.likes),
+      predictedComments: Math.round(predictions.comments),
+      confidence: predictions.confidence,
+      bestTime: determineOptimalTime(analytics),
+      bestDay: determineOptimalDay(analytics),
+      recommendedDuration: 45, // Default recommended duration
+      trendingHashtags,
+      recommendations: generateRecommendations(analytics),
+      insights: [
+        {
+          type: 'engagement',
+          message: 'Your engagement rate is trending upward',
+          confidence: 85,
+        },
+        {
+          type: 'timing',
+          message: 'Evening posts perform 25% better than morning posts',
+          confidence: 90,
+        },
+        {
+          type: 'content',
+          message: 'Tutorial-style content drives higher watch time',
+          confidence: 80,
+        },
+      ],
+    };
+  } catch (error) {
+    logger.error('Prophecy generation failed', error as Error);
+    throw error;
+  }
+}
+
+// Generate prophecy with all available models
+export async function generateProphecyWithAllModels(request: ProphecyRequest): Promise<Record<ModelType, ProphecyResult>> {
+  try {
+    logger.info('Generating prophecy with all models', { 
+      userId: request.userId, 
+      clipId: request.clipId
+    });
+    
+    // Fetch analytics data
+    const analytics = await fetchUserAnalytics(request.userId);
+    
+    // Check if we have enough data for advanced models
+    if (analytics.length >= 5) {
+      try {
+        // Train the advanced models
+        await advancedProphecyEngine.trainModels(analytics);
+        
+        // Generate predictions using all models
+        const clipData: Partial<ClipAnalytics> = {
+          userId: request.userId,
+          clipId: request.clipId,
+          platform: request.platform || 'tiktok',
+          postedAt: new Date().toISOString()
+        };
+        
+        const predictions = await advancedProphecyEngine.predictWithAllModels(clipData);
+        logger.info('Multi-model prophecy generated successfully');
+        
+        return predictions;
+      } catch (error) {
+        logger.error('Multi-model prophecy generation failed', error as Error);
+        throw error;
+      }
+    } else {
+      logger.warn('Not enough data for advanced models', { dataPoints: analytics.length });
+      throw new Error('Not enough data for multi-model predictions');
+    }
+  } catch (error) {
+    logger.error('Multi-model prophecy generation failed', error as Error);
+    throw error;
+  }
 }
 
 // Cache prophecy results
 const prophecyCache = new Map<string, { result: ProphecyResult; timestamp: number }>();
 const CACHE_TTL = 1000 * 60 * 15; // 15 minutes
 
-export async function getProphecy(userId: string, clipId?: string): Promise<ProphecyResult> {
-  const cacheKey = `${userId}:${clipId || 'default'}`;
+export async function getProphecy(userId: string, clipId?: string, modelType: ModelType = 'ensemble'): Promise<ProphecyResult> {
+  const cacheKey = `${userId}:${clipId || 'default'}:${modelType}`;
   const cached = prophecyCache.get(cacheKey);
 
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    logger.debug('Using cached prophecy', { cacheKey });
     return cached.result;
   }
 
-  const result = await generateProphecy({ userId, clipId });
+  const result = await generateProphecy({ userId, clipId }, modelType);
   prophecyCache.set(cacheKey, { result, timestamp: Date.now() });
 
   return result;
+}
+
+// Get available model types
+export function getAvailableModelTypes(): ModelType[] {
+  return advancedProphecyEngine.getAvailableModels();
+}
+
+// Get model confidence
+export function getModelConfidence(modelType: ModelType): number {
+  return advancedProphecyEngine.getModelConfidence(modelType);
+}
+
+// Set default model type
+export function setDefaultModelType(modelType: ModelType): void {
+  advancedProphecyEngine.setDefaultModel(modelType);
 }

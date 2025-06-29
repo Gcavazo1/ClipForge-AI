@@ -102,6 +102,8 @@ export interface ClipAnalytics {
   viewsOverTime?: Array<{ date: string; views: number }>;
 }
 
+export type ModelType = 'linear' | 'randomForest' | 'ensemble' | 'xgboost';
+
 export interface ProphecyRequest {
   userId: string;
   clipId?: string;
