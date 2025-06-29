@@ -25,19 +25,24 @@ export class StorageService {
   // Upload video file
   static async uploadVideo(file: File, userId: string, onProgress?: (progress: number) => void): Promise<UploadResult> {
     try {
-      const fileExt = file.name.split('.').pop();
+      const fileExt = getFileExtension(file.name);
       const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
 
       logger.info('Starting video upload', { fileName, size: file.size });
 
       // Ensure we have a valid content type
-      const contentType = file.type || getMimeTypeFromExtension(getFileExtension(file.name));
+      const contentType = file.type || getMimeTypeFromExtension(fileExt);
       
       logger.info('Using content type for upload', { contentType, fileName });
 
+      // Create a new File with explicit content type
+      const fileWithContentType = new File([file], fileName, {
+        type: contentType
+      });
+
       const { data, error } = await supabase.storage
         .from('videos')
-        .upload(fileName, file, {
+        .upload(fileName, fileWithContentType, {
           cacheControl: '3600',
           upsert: false,
           contentType, // Explicitly set content type
@@ -70,15 +75,20 @@ export class StorageService {
   // Upload thumbnail
   static async uploadThumbnail(file: File, userId: string): Promise<UploadResult> {
     try {
-      const fileExt = file.name.split('.').pop();
+      const fileExt = getFileExtension(file.name);
       const fileName = `${userId}/${Date.now()}-thumbnail.${fileExt}`;
 
       // Ensure we have a valid content type
       const contentType = file.type || 'image/jpeg';
 
+      // Create a new File with explicit content type
+      const fileWithContentType = new File([file], fileName, {
+        type: contentType
+      });
+
       const { data, error } = await supabase.storage
         .from('thumbnails')
-        .upload(fileName, file, {
+        .upload(fileName, fileWithContentType, {
           cacheControl: '3600',
           upsert: false,
           contentType // Explicitly set content type
@@ -106,15 +116,20 @@ export class StorageService {
   // Upload exported video
   static async uploadExport(file: File, userId: string, clipId: string): Promise<UploadResult> {
     try {
-      const fileExt = file.name.split('.').pop();
+      const fileExt = getFileExtension(file.name);
       const fileName = `${userId}/exports/${clipId}-${Date.now()}.${fileExt}`;
 
       // Ensure we have a valid content type
       const contentType = file.type || 'video/mp4';
 
+      // Create a new File with explicit content type
+      const fileWithContentType = new File([file], fileName, {
+        type: contentType
+      });
+
       const { data, error } = await supabase.storage
         .from('exports')
-        .upload(fileName, file, {
+        .upload(fileName, fileWithContentType, {
           cacheControl: '3600',
           upsert: false,
           contentType // Explicitly set content type
@@ -144,11 +159,16 @@ export class StorageService {
   // Upload user avatar
   static async uploadAvatar(file: File, userId: string): Promise<UploadResult> {
     try {
-      const fileExt = file.name.split('.').pop();
+      const fileExt = getFileExtension(file.name);
       const fileName = `${userId}/avatar.${fileExt}`;
 
       // Ensure we have a valid content type
       const contentType = file.type || 'image/jpeg';
+
+      // Create a new File with explicit content type
+      const fileWithContentType = new File([file], fileName, {
+        type: contentType
+      });
 
       // Delete existing avatar first
       await supabase.storage
@@ -157,7 +177,7 @@ export class StorageService {
 
       const { data, error } = await supabase.storage
         .from('avatars')
-        .upload(fileName, file, {
+        .upload(fileName, fileWithContentType, {
           cacheControl: '3600',
           upsert: true,
           contentType // Explicitly set content type

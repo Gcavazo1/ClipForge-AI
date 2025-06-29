@@ -49,6 +49,12 @@ export class VideoProjectService {
   }
 
   static async getById(id: string): Promise<VideoProject | null> {
+    // Validate ID to prevent invalid UUID errors
+    if (!id || id === 'undefined' || id === 'null') {
+      logger.error('Invalid project ID provided', { id });
+      return null;
+    }
+
     return OptimizedDatabaseService.cachedQuery(
       `video-project-${id}`,
       async () => {
@@ -60,7 +66,10 @@ export class VideoProjectService {
           .single();
 
         if (error) {
-          if (error.code === 'PGRST116') return null; // Not found
+          if (error.code === 'PGRST116') {
+            logger.warn('Project not found', { id });
+            return null; // Not found
+          }
           throw error;
         }
 

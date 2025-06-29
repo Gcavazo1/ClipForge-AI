@@ -106,12 +106,12 @@ export class VideoMetadataExtractor {
     ];
     
     // Check file extension as fallback
-    const fileExt = file.name.split('.').pop()?.toLowerCase();
+    const fileExt = getFileExtension(file.name);
     const validExtensions = ['mp4', 'mov', 'avi', 'webm', 'mkv'];
     
     // If MIME type is not recognized but extension is valid, consider it valid
     const hasValidExtension = fileExt && validExtensions.includes(fileExt);
-    const hasValidMimeType = validTypes.includes(file.type);
+    const hasValidMimeType = file.type && validTypes.includes(file.type);
     
     // Get content type - either from file or inferred from extension
     const contentType = file.type || (fileExt ? getMimeTypeFromExtension(fileExt) : '');

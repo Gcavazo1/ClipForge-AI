@@ -81,7 +81,7 @@ export class ChunkedUploader {
       this.paused = false;
 
       // Generate a unique file path
-      const fileExt = this.file.name.split('.').pop() || '';
+      const fileExt = getFileExtension(this.file.name);
       const fileName = customPath || `${this.userId}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
 
       // Calculate total chunks
@@ -144,9 +144,14 @@ export class ChunkedUploader {
     onProgress?: (progress: UploadProgress) => void
   ): Promise<UploadResult> {
     try {
+      // Create a new File with explicit content type
+      const fileWithContentType = new File([this.file], fileName, {
+        type: contentType
+      });
+
       const { data, error } = await supabase.storage
         .from(this.bucket)
-        .upload(fileName, this.file, {
+        .upload(fileName, fileWithContentType, {
           cacheControl: '3600',
           upsert: false,
           contentType, // Explicitly set content type
@@ -341,7 +346,7 @@ export class ChunkedUploader {
       ? `${fileName}.part${chunkIndex}` 
       : fileName;
     
-    // Create a File object from the Blob to preserve MIME type
+    // Create a File object from the Blob with explicit content type
     const chunkFile = new File([chunk], chunkName, { 
       type: contentType // Use the explicit content type
     });
