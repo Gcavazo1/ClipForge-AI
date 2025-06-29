@@ -63,14 +63,26 @@ export async function signUp(email: string, password: string, name: string) {
 
     if (error) {
       logger.error('Sign up failed', error, { email });
-      throw new Error(error.message);
+      
+      // Provide more user-friendly error messages
+      if (error.message.includes('User already registered')) {
+        throw new Error('An account with this email already exists. Please sign in instead.');
+      } else if (error.message.includes('Password should be')) {
+        throw new Error('Password does not meet requirements. Please use at least 8 characters with uppercase, lowercase, and numbers.');
+      } else if (error.message.includes('Invalid email')) {
+        throw new Error('Please enter a valid email address.');
+      } else if (error.message.includes('Database error')) {
+        throw new Error('There was a problem creating your account. Please try again in a moment.');
+      } else {
+        throw new Error(error.message);
+      }
     }
 
     if (!data.user) {
       throw new Error('Registration failed - no user returned');
     }
 
-    // Create user profile
+    // Check if email confirmation is required
     if (data.user && !data.session) {
       logger.info('User registered, email confirmation required', { email });
       return { 
@@ -80,9 +92,29 @@ export async function signUp(email: string, password: string, name: string) {
       };
     }
 
-    // If session exists, create profile immediately
+    // If session exists, the user profile should be created automatically by the trigger
     if (data.session) {
-      await createUserProfile(data.user);
+      // Wait a moment for the trigger to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Verify profile was created
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('id', data.user.id)
+          .single();
+
+        if (profileError && profileError.code === 'PGRST116') {
+          // Profile doesn't exist, create it manually
+          logger.warn('Profile not created by trigger, creating manually', { userId: data.user.id });
+          await createUserProfileManually(data.user, name);
+        }
+      } catch (profileCheckError) {
+        logger.warn('Could not verify profile creation', profileCheckError as Error);
+        // Continue anyway, profile might be created later
+      }
+
       logger.info('User registered and profile created', { userId: data.user.id });
     }
 
@@ -97,6 +129,47 @@ export async function signUp(email: string, password: string, name: string) {
   }
 }
 
+// Manual profile creation fallback
+async function createUserProfileManually(user: any, name: string) {
+  try {
+    const { error } = await supabase
+      .from('user_profiles')
+      .insert({
+        id: user.id,
+        display_name: name,
+        plan_type: 'free',
+        usage_stats: {
+          clips_created: 0,
+          exports_used: 0,
+          storage_used: 0,
+          last_reset_date: new Date().toISOString()
+        },
+        preferences: {
+          notifications: {
+            email: true,
+            push: true
+          },
+          default_export_settings: {
+            format: 'mp4',
+            quality: 'high',
+            include_captions: true
+          }
+        },
+        onboarding_completed: false
+      });
+
+    if (error) {
+      logger.error('Manual profile creation failed', error);
+      // Don't throw here, as the user is already created
+    } else {
+      logger.info('Manual profile creation successful', { userId: user.id });
+    }
+  } catch (error) {
+    logger.error('Manual profile creation error', error as Error);
+    // Don't throw here, as the user is already created
+  }
+}
+
 export async function signIn(email: string, password: string) {
   try {
     logger.info('Starting user sign in', { email });
@@ -108,7 +181,17 @@ export async function signIn(email: string, password: string) {
 
     if (error) {
       logger.error('Sign in failed', error, { email });
-      throw new Error(error.message);
+      
+      // Provide more user-friendly error messages
+      if (error.message.includes('Invalid login credentials')) {
+        throw new Error('Invalid email or password. Please check your credentials and try again.');
+      } else if (error.message.includes('Email not confirmed')) {
+        throw new Error('Please check your email and click the confirmation link before signing in.');
+      } else if (error.message.includes('Too many requests')) {
+        throw new Error('Too many sign-in attempts. Please wait a moment before trying again.');
+      } else {
+        throw new Error(error.message);
+      }
     }
 
     if (!data.user || !data.session) {
@@ -273,46 +356,6 @@ export async function refreshSession() {
 }
 
 // User profile management
-async function createUserProfile(user: any) {
-  try {
-    const { error } = await supabase
-      .from('user_profiles')
-      .insert({
-        id: user.id,
-        display_name: user.user_metadata?.name || user.user_metadata?.display_name || '',
-        plan_type: 'free',
-        usage_stats: {
-          clipsCreated: 0,
-          exportsUsed: 0,
-          storageUsed: 0,
-          lastResetDate: new Date().toISOString()
-        },
-        preferences: {
-          notifications: {
-            email: true,
-            push: true
-          },
-          default_export_settings: {
-            format: 'mp4',
-            quality: 'high',
-            include_captions: true
-          }
-        },
-        onboarding_completed: false
-      });
-
-    if (error && error.code !== '23505') { // Ignore duplicate key error
-      logger.error('Failed to create user profile', error);
-      throw error;
-    }
-
-    logger.info('User profile created', { userId: user.id });
-  } catch (error) {
-    logger.error('Create user profile error', error as Error);
-    throw error;
-  }
-}
-
 async function ensureUserProfile(user: any) {
   try {
     const { data: profile, error } = await supabase
@@ -323,7 +366,7 @@ async function ensureUserProfile(user: any) {
 
     if (error && error.code === 'PGRST116') {
       // Profile doesn't exist, create it
-      await createUserProfile(user);
+      await createUserProfileManually(user, user.user_metadata?.name || user.user_metadata?.display_name || '');
     } else if (error) {
       logger.error('Failed to check user profile', error);
       throw error;
