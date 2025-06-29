@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Rekalgera';
+  src: url('/Rekalgera-Regular.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   body {
     @apply antialiased;
@@ -52,6 +60,10 @@
 
   .timeline-scrubber {
     @apply absolute top-0 h-full w-0.5 bg-primary-500 z-20;
+  }
+
+  .title-font {
+    font-family: 'Rekalgera', sans-serif;
   }
 }
 

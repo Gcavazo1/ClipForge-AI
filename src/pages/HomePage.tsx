@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Scissors, Video, Wand2, Upload, Zap, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Plus, Video, Search, SortDesc, Scissors, Upload, Wand2, Zap, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import VideoUploader from '../components/video/VideoUploader';
 import Button from '../components/ui/button';
+import VideoUploader from '../components/video/VideoUploader';
 import { useAppStore } from '../store';
 import { VideoProject } from '../types';
 
@@ -56,7 +56,7 @@ const HomePage: React.FC = () => {
   return (
     <>
       {/* Fullscreen video background with vignette overlay */}
-      <div className="fixed inset-0 z-0">
+      <div className="fixed inset-0 z-[-1] overflow-hidden">
         <video 
           autoPlay 
           loop 
@@ -64,10 +64,10 @@ const HomePage: React.FC = () => {
           playsInline
           className="absolute min-w-full min-h-full object-cover w-auto h-auto"
         >
-          <source src="/public/BG.mp4" type="video/mp4" />
+          <source src="/BG.mp4" type="video/mp4" />
         </video>
         {/* Vignette overlay */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(0,0,0,0.4)_0%,_rgba(0,0,0,0.88)_100%)]" />
+        <div className="absolute inset-0 bg-gradient-radial from-transparent via-background/70 to-background pointer-events-none"></div>
       </div>
 
       <div className="max-w-6xl mx-auto relative z-10">
@@ -82,7 +82,7 @@ const HomePage: React.FC = () => {
             <div className="inline-block bg-primary-900/30 p-2 rounded-lg mb-6 backdrop-blur-sm">
               <Scissors size={28} className="text-primary-400" />
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold mb-6 bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent">
+            <h1 className="text-4xl md:text-5xl font-bold mb-6 bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent title-font">
               Turn Long Videos Into Engaging Clips with AI
             </h1>
             <p className="text-lg text-foreground-muted mb-8 max-w-2xl mx-auto">
@@ -127,7 +127,7 @@ const HomePage: React.FC = () => {
         <section className="py-12 md:py-20 bg-background/80 backdrop-blur-sm clip-path-slant">
           <div className="max-w-6xl mx-auto px-4">
             <motion.h2 
-              className="text-2xl md:text-3xl font-bold text-center mb-12"
+              className="text-2xl md:text-3xl font-bold text-center mb-12 title-font"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.3 }}
@@ -148,7 +148,7 @@ const HomePage: React.FC = () => {
                   <div className="w-12 h-12 bg-primary-900/30 rounded-lg flex items-center justify-center text-primary-400 mb-4">
                     {item.icon}
                   </div>
-                  <h3 className="text-lg font-semibold mb-2">{item.title}</h3>
+                  <h3 className="text-lg font-semibold mb-2 title-font">{item.title}</h3>
                   <p className="text-foreground-muted text-sm">{item.description}</p>
                 </motion.div>
               ))}
@@ -166,7 +166,7 @@ const HomePage: React.FC = () => {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
               >
-                <h2 className="text-2xl md:text-3xl font-bold mb-6">
+                <h2 className="text-2xl md:text-3xl font-bold mb-6 title-font">
                   Find the <span className="text-primary-500">Perfect Moments</span> in Your Content
                 </h2>
                 <div className="space-y-4 mb-8">
@@ -213,7 +213,7 @@ const HomePage: React.FC = () => {
         {/* CTA Section */}
         <section className="py-16 bg-primary-900/30 backdrop-blur-sm rounded-lg mx-4 mb-12">
           <div className="max-w-4xl mx-auto text-center px-4">
-            <h2 className="text-2xl md:text-3xl font-bold mb-6">
+            <h2 className="text-2xl md:text-3xl font-bold mb-6 title-font">
               Ready to Create Engaging Video Clips?
             </h2>
             <p className="text-lg text-foreground-muted mb-8 max-w-2xl mx-auto">

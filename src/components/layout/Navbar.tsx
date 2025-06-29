@@ -100,7 +100,7 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
             <div className="flex items-center justify-center bg-primary-600 h-9 w-9 rounded-md mr-2">
               <Scissors size={20} className="text-white" />
             </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent">
+            <span className="text-xl font-bold bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent title-font">
               ClipForge AI
             </span>
           </Link>
