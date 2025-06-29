@@ -1,7 +1,8 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
+import Button from '../ui/button';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -18,12 +19,24 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const location = useLocation();
 
   // Show loading spinner while auth is initializing
-  if (!initialized || loading) {
+  if (!initialized) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <Loader2 size={32} className="animate-spin text-primary-500 mx-auto mb-4" />
-          <p className="text-foreground-muted">Loading...</p>
+          <p className="text-foreground-muted">Initializing application...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading spinner while auth state is loading
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 size={32} className="animate-spin text-primary-500 mx-auto mb-4" />
+          <p className="text-foreground-muted">Loading your profile...</p>
         </div>
       </div>
     );

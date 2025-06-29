@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, Scissors, LogOut, Settings, CreditCard, User } from 'lucide-react';
+import { Menu, X, Scissors, LogOut, Settings, CreditCard, User, Loader2, AlertCircle } from 'lucide-react';
 import Button from '../ui/button';
 import { useAuth } from '../../hooks/useAuth';
 import { signOut } from '../../lib/auth';
 import { Tooltip } from '../ui/tooltip';
 import { useQuery } from '@tanstack/react-query';
 import { getCurrentSubscription } from '../../lib/stripe';
+import { Toast, ToastTitle, ToastDescription } from '../ui/toast';
 
 interface NavbarProps {
   isSidebarOpen: boolean;
@@ -16,19 +17,25 @@ interface NavbarProps {
 const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, loading } = useAuth();
+  const { user, loading, initialized } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   const showSidebarToggle = location.pathname !== '/' && 
                            !location.pathname.includes('/signin') && 
                            !location.pathname.includes('/signup') &&
                            !location.pathname.includes('/reset-password');
 
-  const { data: subscription } = useQuery({
+  const { data: subscription, isLoading: isLoadingSubscription } = useQuery({
     queryKey: ['subscription'],
     queryFn: getCurrentSubscription,
-    enabled: !!user,
+    enabled: !!user && initialized && !loading,
+    retry: 1,
+    onError: (err) => {
+      console.error('Failed to load subscription:', err);
+    }
   });
 
   const handleSignOut = async () => {
@@ -38,10 +45,24 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
       navigate('/');
     } catch (error) {
       console.error('Sign out failed:', error);
+      setError('Failed to sign out. Please try again.');
+      setShowToast(true);
     } finally {
       setIsSigningOut(false);
       setShowUserMenu(false);
     }
+  };
+
+  // Get user display name
+  const getUserDisplayName = () => {
+    if (!user) return '';
+    return user.name || user.user_metadata?.name || user.email?.split('@')[0] || 'User';
+  };
+
+  // Get user initial
+  const getUserInitial = () => {
+    if (!user) return 'U';
+    return (user.name || user.user_metadata?.name || user.email || 'U').charAt(0).toUpperCase();
   };
   
   return (
@@ -69,11 +90,18 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
         </div>
         
         <div className="flex items-center gap-3">
-          {loading ? (
+          {!initialized ? (
             <div className="w-8 h-8 bg-background-lighter rounded-full animate-pulse" />
+          ) : loading ? (
+            <div className="flex items-center">
+              <Loader2 size={20} className="animate-spin mr-2 text-primary-400" />
+              <span className="text-sm text-foreground-muted">Loading...</span>
+            </div>
           ) : user ? (
             <>
-              {subscription && (
+              {isLoadingSubscription ? (
+                <div className="w-12 h-6 bg-background-lighter rounded-full animate-pulse" />
+              ) : subscription && (
                 <Tooltip content={`${subscription.status === 'active' ? 'Active Pro Plan' : 'Free Plan'}`}>
                   <div className={`px-2 py-1 rounded-full text-xs font-medium ${
                     subscription.status === 'active' 
@@ -91,10 +119,10 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
                   className="flex items-center gap-2 p-2 rounded-md hover:bg-background-lighter transition-colors"
                 >
                   <div className="bg-background-lighter h-8 w-8 rounded-full flex items-center justify-center">
-                    {user.user_metadata?.name?.charAt(0) || user.email?.charAt(0) || 'U'}
+                    {getUserInitial()}
                   </div>
                   <span className="hidden md:block text-sm font-medium">
-                    {user.user_metadata?.name || user.email}
+                    {getUserDisplayName()}
                   </span>
                 </button>
 
@@ -109,10 +137,10 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
                       <div className="px-4 py-3 border-b border-background-lighter">
                         <div className="flex items-center">
                           <div className="bg-background-lighter h-10 w-10 rounded-full flex items-center justify-center mr-3">
-                            {user.user_metadata?.name?.charAt(0) || user.email?.charAt(0) || 'U'}
+                            {getUserInitial()}
                           </div>
                           <div>
-                            <div className="font-medium">{user.user_metadata?.name || 'User'}</div>
+                            <div className="font-medium">{getUserDisplayName()}</div>
                             <div className="text-sm text-foreground-muted">{user.email}</div>
                           </div>
                         </div>
@@ -148,7 +176,11 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
                             disabled={isSigningOut}
                             className="w-full px-4 py-2 text-left hover:bg-background-lighter flex items-center text-error-500 transition-colors disabled:opacity-50"
                           >
-                            <LogOut size={16} className="mr-3" />
+                            {isSigningOut ? (
+                              <Loader2 size={16} className="animate-spin mr-3" />
+                            ) : (
+                              <LogOut size={16} className="mr-3" />
+                            )}
                             <span>{isSigningOut ? 'Signing out...' : 'Sign Out'}</span>
                           </button>
                         </div>
@@ -178,6 +210,13 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
           )}
         </div>
       </div>
+
+      {showToast && error && (
+        <Toast open={showToast} onOpenChange={setShowToast} variant="error">
+          <ToastTitle>Error</ToastTitle>
+          <ToastDescription>{error}</ToastDescription>
+        </Toast>
+      )}
     </header>
   );
 };

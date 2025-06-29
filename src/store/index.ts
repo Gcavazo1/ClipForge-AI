@@ -108,12 +108,67 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!user) return;
     
     try {
+      logger.info('Loading user profile', { userId: user.id });
       const profile = await UserProfileService.getProfile(user.id);
+      
       if (profile) {
+        logger.info('User profile loaded successfully', { userId: user.id });
         set({ user: { ...user, ...profile } });
+      } else {
+        // If no profile exists, we'll create default values
+        logger.warn('No user profile found during loadUserProfile', { userId: user.id });
+        
+        // Keep the user authenticated but with default values
+        set({ 
+          user: { 
+            ...user,
+            name: user.name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+            plan: 'free',
+            usage: {
+              clipsCreated: 0,
+              exportsUsed: 0,
+              storageUsed: 0,
+              lastResetDate: new Date().toISOString()
+            },
+            notifications: {
+              email: true,
+              push: true
+            }
+          } 
+        });
+        
+        // Try to create the profile
+        try {
+          await UserProfileService.updateProfile(user.id, {
+            name: user.name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+            plan: 'free'
+          });
+          logger.info('Created default user profile', { userId: user.id });
+        } catch (createError) {
+          logger.error('Failed to create default user profile', createError as Error);
+        }
       }
     } catch (error) {
       logger.error('Failed to load user profile', error as Error);
+      
+      // Don't fail completely, keep user authenticated with default values
+      set({ 
+        user: { 
+          ...user,
+          name: user.name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+          plan: 'free',
+          usage: {
+            clipsCreated: 0,
+            exportsUsed: 0,
+            storageUsed: 0,
+            lastResetDate: new Date().toISOString()
+          },
+          notifications: {
+            email: true,
+            push: true
+          }
+        } 
+      });
     }
   },
   

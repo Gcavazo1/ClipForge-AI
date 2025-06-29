@@ -10,6 +10,7 @@ import { VideoProcessingService } from '../../lib/video-processing';
 import { AIServiceIntegration } from '../../lib/ai/ai-service-integration';
 import { useAppStore } from '../../store';
 import { logger } from '../../lib/logger';
+import { useAuth } from '../../hooks/useAuth';
 
 interface VideoUploaderProps {
   onUploadComplete: (project: VideoProject) => void;
@@ -37,6 +38,8 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
   const isTranscribing = useAppStore((state) => state.isTranscribing);
   const setUploadState = useAppStore((state) => state.setUploadState);
   const setTranscribeState = useAppStore((state) => state.setTranscribeState);
+  
+  const { initialized, loading } = useAuth();
   
   const initializeProcessingStages = (): ProcessingStage[] => [
     {
@@ -104,7 +107,14 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
   };
 
   const handleUpload = useCallback(async (file: File) => {
-    if (!user) {
+    // Check if auth is still initializing
+    if (!initialized || loading) {
+      setError('Please wait while we finish loading your profile...');
+      return;
+    }
+    
+    // Check if user is authenticated
+    if (!user || !user.id) {
       setError('Please sign in to upload videos');
       return;
     }
@@ -301,7 +311,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
         );
       }
     }
-  }, [user, onUploadComplete, setUploadState, setTranscribeState, processingStages, currentProject, serviceStatus]);
+  }, [user, onUploadComplete, setUploadState, setTranscribeState, processingStages, currentProject, serviceStatus, initialized, loading]);
   
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => {
@@ -318,7 +328,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
       'video/webm': ['.webm'],
     },
     maxSize: 500 * 1024 * 1024, // 500MB
-    disabled: isUploading || isTranscribing
+    disabled: isUploading || isTranscribing || !initialized || loading
   });
   
   const formatFileSize = (bytes: number) => {
@@ -438,6 +448,14 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
   
   return (
     <div className="space-y-4">
+      {/* Auth Status Indicator */}
+      {(!initialized || loading) && (
+        <div className="flex items-center justify-center p-2 rounded-md text-sm bg-warning-900/20 text-warning-500">
+          <Loader2 size={16} className="animate-spin mr-2" />
+          Loading your profile... Please wait
+        </div>
+      )}
+      
       {/* AI Service Status Indicator */}
       {serviceStatus && (
         <div className={`flex items-center justify-center p-2 rounded-md text-sm ${
@@ -462,6 +480,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
       <div 
         {...getRootProps()} 
         className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+          !initialized || loading ? 'opacity-50 cursor-not-allowed' :
           isDragActive ? 'border-primary-500 bg-primary-500/10' : 'border-gray-600 hover:border-primary-400 hover:bg-background-lighter'
         }`}
       >
@@ -469,9 +488,16 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
         <Film size={40} className={`mx-auto mb-4 ${isDragActive ? 'text-primary-400' : 'text-foreground-muted'}`} />
         <p className="text-lg font-medium mb-2">Upload your video</p>
         <p className="text-sm text-foreground-muted mb-4">
-          Drag & drop a video file here, or click to select
+          {!initialized || loading 
+            ? 'Please wait while we finish loading your profile...'
+            : 'Drag & drop a video file here, or click to select'}
         </p>
-        <Button variant="outline" size="sm" icon={<Upload size={16} />}>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          icon={<Upload size={16} />}
+          disabled={!initialized || loading}
+        >
           Select Video
         </Button>
         <p className="text-xs text-foreground-muted mt-4">

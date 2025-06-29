@@ -155,12 +155,16 @@ export class VideoProjectService {
     errorMessage?: string
   ): Promise<void> {
     try {
-      const { error } = await supabase.rpc('update_project_status', {
-        project_id: id,
-        new_status: status,
-        progress_value: progress,
-        error_msg: errorMessage
-      });
+      // Use direct update instead of RPC for better error handling
+      const { error } = await supabase
+        .from('video_projects')
+        .update({
+          status,
+          progress: progress !== undefined ? progress : undefined,
+          error_message: errorMessage,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
 
       if (error) throw error;
 
@@ -428,7 +432,10 @@ export class UserProfileService {
           .single();
 
         if (error) {
-          if (error.code === 'PGRST116') return null; // Not found
+          if (error.code === 'PGRST116') {
+            logger.warn('User profile not found', { userId });
+            return null; // Not found
+          }
           throw error;
         }
 
@@ -445,7 +452,8 @@ export class UserProfileService {
         try {
           const { data, error } = await supabase
             .from('user_profiles')
-            .update({
+            .upsert({
+              id: userId,
               display_name: updates.name,
               avatar_url: updates.avatar,
               plan_type: updates.plan,
@@ -454,7 +462,6 @@ export class UserProfileService {
               } : undefined,
               updated_at: new Date().toISOString()
             })
-            .eq('id', userId)
             .select()
             .single();
 
@@ -477,16 +484,25 @@ export class UserProfileService {
       'user-usage-stats-update',
       async () => {
         try {
-          const { data: stats, error } = await supabase.rpc('get_user_usage_stats', {
-            user_uuid: userId
-          });
-
-          if (error) throw error;
+          // Get current usage stats directly
+          const { data: userProfile, error: profileError } = await supabase
+            .from('user_profiles')
+            .select('usage_stats')
+            .eq('id', userId)
+            .single();
+            
+          if (profileError) throw profileError;
+          
+          // Calculate updated stats
+          const updatedStats = {
+            ...userProfile.usage_stats,
+            last_reset_date: userProfile.usage_stats.last_reset_date || new Date().toISOString()
+          };
 
           const { error: updateError } = await supabase
             .from('user_profiles')
             .update({
-              usage_stats: stats,
+              usage_stats: updatedStats,
               updated_at: new Date().toISOString()
             })
             .eq('id', userId);

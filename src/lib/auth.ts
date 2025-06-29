@@ -73,7 +73,7 @@ export async function signUp(email: string, password: string, name: string) {
         throw new Error('Please enter a valid email address.');
       } else if (error.message.includes('Database error')) {
         throw new Error('There was a problem creating your account. Please try again in a moment.');
-      } else if (error.message.includes('rate limit') || error.message.includes('after')) {
+      } else if (error.message.includes('rate limit') || error.message.includes('after') || error.message.includes('Too many')) {
         throw new Error('Too many sign-up attempts. Please wait a moment before trying again.');
       } else {
         throw new Error(error.message);
@@ -114,7 +114,8 @@ export async function signUp(email: string, password: string, name: string) {
         }
       } catch (profileCheckError) {
         logger.warn('Could not verify profile creation', profileCheckError as Error);
-        // Continue anyway, profile might be created later
+        // Try to create profile anyway
+        await createUserProfileManually(data.user, name);
       }
 
       logger.info('User registered and profile created', { userId: data.user.id });
@@ -131,44 +132,71 @@ export async function signUp(email: string, password: string, name: string) {
   }
 }
 
-// Manual profile creation fallback
-async function createUserProfileManually(user: any, name: string) {
+// Manual profile creation fallback - exported for use in useAuth
+export async function createUserProfileManually(user: any, name: string) {
   try {
-    const { error } = await supabase
+    // First check if profile already exists to avoid conflicts
+    const { data: existingProfile } = await supabase
       .from('user_profiles')
-      .insert({
-        id: user.id,
-        display_name: name,
-        plan_type: 'free',
-        usage_stats: {
-          clips_created: 0,
-          exports_used: 0,
-          storage_used: 0,
-          last_reset_date: new Date().toISOString()
-        },
-        preferences: {
-          notifications: {
-            email: true,
-            push: true
-          },
-          default_export_settings: {
-            format: 'mp4',
-            quality: 'high',
-            include_captions: true
-          }
-        },
-        onboarding_completed: false
-      });
-
-    if (error) {
-      logger.error('Manual profile creation failed', error);
-      // Don't throw here, as the user is already created
-    } else {
-      logger.info('Manual profile creation successful', { userId: user.id });
+      .select('id')
+      .eq('id', user.id)
+      .single();
+      
+    if (existingProfile) {
+      logger.info('Profile already exists, skipping creation', { userId: user.id });
+      return;
     }
+    
+    // Create profile with retry logic
+    let retries = 3;
+    let lastError = null;
+    
+    while (retries > 0) {
+      const { error } = await supabase
+        .from('user_profiles')
+        .insert({
+          id: user.id,
+          display_name: name,
+          plan_type: 'free',
+          usage_stats: {
+            clips_created: 0,
+            exports_used: 0,
+            storage_used: 0,
+            last_reset_date: new Date().toISOString()
+          },
+          preferences: {
+            notifications: {
+              email: true,
+              push: true
+            },
+            default_export_settings: {
+              format: 'mp4',
+              quality: 'high',
+              include_captions: true
+            }
+          },
+          onboarding_completed: false
+        });
+
+      if (!error) {
+        logger.info('Manual profile creation successful', { userId: user.id });
+        return;
+      }
+      
+      lastError = error;
+      retries--;
+      
+      if (retries > 0) {
+        logger.warn(`Profile creation failed, retrying (${retries} attempts left)`, error);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    
+    logger.error('Manual profile creation failed after retries', lastError);
+    throw lastError;
   } catch (error) {
     logger.error('Manual profile creation error', error as Error);
-    // Don't throw here, as the user is already created
+    throw error;
   }
 }
 
@@ -373,7 +401,11 @@ async function ensureUserProfile(user: any) {
 
     if (error && error.code === 'PGRST116') {
       // Profile doesn't exist, create it
-      await createUserProfileManually(user, user.user_metadata?.name || user.user_metadata?.display_name || '');
+      logger.warn('Profile not found during sign-in, creating profile', { userId: user.id });
+      await createUserProfileManually(
+        user, 
+        user.user_metadata?.name || user.user_metadata?.display_name || user.email?.split('@')[0] || 'User'
+      );
     } else if (error) {
       logger.error('Failed to check user profile', error);
       throw error;
@@ -404,11 +436,15 @@ export async function getCurrentUser() {
     }
 
     // Get user profile
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
       .select('*')
       .eq('id', user.id)
       .single();
+
+    if (profileError && profileError.code !== 'PGRST116') {
+      logger.error('Failed to get user profile', profileError);
+    }
 
     return {
       ...user,
