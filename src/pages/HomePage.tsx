@@ -64,7 +64,7 @@ const HomePage: React.FC = () => {
           playsInline
           className="absolute min-w-full min-h-full object-cover w-auto h-auto"
         >
-          <source src="public/BG.mp4" type="video/mp4" />
+          <source src="/BG.mp4" type="video/mp4" />
         </video>
         {/* Vignette overlay */}
         <div className="absolute inset-0 bg-gradient-radial from-transparent via-background/70 to-background pointer-events-none"></div>
