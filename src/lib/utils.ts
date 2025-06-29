@@ -80,19 +80,19 @@ export function detectHighlights(transcript: TranscriptSegment[]): Array<{
     }
     
     // Insight indicators
-    if /(learn|understand|realize|discover|found out|secret|tip|trick)/i.test(text)) {
+    if (/(learn|understand|realize|discover|found out|secret|tip|trick)/i.test(text)) {
       score += 0.4;
       type = 'insight';
     }
     
     // Hook indicators
-    if /(here's|check this|watch this|you won't believe|wait for it)/i.test(text)) {
+    if (/(here's|check this|watch this|you won\'t believe|wait for it)/i.test(text)) {
       score += 0.35;
       type = 'hook';
     }
     
     // Call-to-action indicators
-    if /(subscribe|follow|like|share|comment|check out|visit|click)/i.test(text)) {
+    if (/(subscribe|follow|like|share|comment|check out|visit|click)/i.test(text)) {
       score += 0.25;
       type = 'cta';
     }
