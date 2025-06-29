@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, Scissors, LogOut, Settings, CreditCard, Loader2, AlertCircle } from 'lucide-react';
 import Button from '../ui/button';
-import { useAuth } from '../../hooks/useAuth';
-import { signOut } from '../../lib/auth';
+import { useAuthService } from '../../hooks/useAuthService';
 import { Tooltip } from '../ui/tooltip';
 import { useQuery } from '@tanstack/react-query';
 import { getCurrentSubscription } from '../../lib/stripe';
@@ -18,7 +17,7 @@ interface NavbarProps {
 const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, loading, initialized, error } = useAuth();
+  const { user, loading, initialized, error, signOut } = useAuthService();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [showToast, setShowToast] = useState(false);
@@ -66,13 +65,13 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
   // Get user display name
   const getUserDisplayName = () => {
     if (!user) return '';
-    return user.name || user.user_metadata?.name || user.email?.split('@')[0] || 'User';
+    return user.user_metadata?.name || user.email?.split('@')[0] || 'User';
   };
 
   // Get user initial
   const getUserInitial = () => {
     if (!user) return 'U';
-    return (user.name || user.user_metadata?.name || user.email || 'U').charAt(0).toUpperCase();
+    return (user.user_metadata?.name || user.email || 'U').charAt(0).toUpperCase();
   };
   
   logger.debug('Navbar render state', { 

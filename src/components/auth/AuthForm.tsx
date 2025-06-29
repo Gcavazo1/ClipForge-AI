@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, User, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { z } from 'zod';
 import Button from '../ui/button';
-import { signIn, signUp, signInSchema, signUpSchema } from '../../lib/auth';
+import { signInSchema, signUpSchema } from '../../lib/auth-service';
+import { useAuthService } from '../../hooks/useAuthService';
 import { Toast, ToastTitle, ToastDescription } from '../ui/toast';
 import { logger } from '../../lib/logger';
 
@@ -14,6 +15,7 @@ interface AuthFormProps {
 const AuthForm: React.FC<AuthFormProps> = ({ mode }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { signIn, signUp } = useAuthService();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
@@ -74,20 +76,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ mode }) => {
       if (err instanceof z.ZodError) {
         setError(err.errors[0].message);
       } else if (err instanceof Error) {
-        // Handle specific auth errors
-        let errorMessage = err.message;
-        
-        if (errorMessage.includes('Invalid login credentials')) {
-          errorMessage = 'Invalid email or password. Please try again.';
-        } else if (errorMessage.includes('Email not confirmed')) {
-          errorMessage = 'Please check your email and click the confirmation link before signing in.';
-        } else if (errorMessage.includes('User already registered')) {
-          errorMessage = 'An account with this email already exists. Please sign in instead.';
-        } else if (errorMessage.includes('rate limit') || errorMessage.includes('Too many') || errorMessage.includes('after')) {
-          errorMessage = 'Too many attempts. Please wait a moment before trying again.';
-        }
-        
-        setError(errorMessage);
+        setError(err.message);
       } else {
         setError('An unexpected error occurred. Please try again.');
       }

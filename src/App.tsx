@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from './lib/error-handling/error-boundary';
 import { setupGlobalErrorHandlers } from './lib/error-handling/error-reporter';
 import { withLazyLoading, preloadComponent } from './lib/performance/lazy-loading';
-import { useAuth } from './hooks/useAuth';
+import { useAuthService } from './hooks/useAuthService';
 import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import { logger } from './lib/logger';
@@ -54,7 +54,7 @@ if (typeof window !== 'undefined') {
 
 function AppContent() {
   // Initialize auth state
-  const { initialized, loading, user } = useAuth();
+  const { initialized, loading, user } = useAuthService();
   
   useEffect(() => {
     logger.debug('App content rendered', { 
