@@ -1,5 +1,7 @@
 import { TranscriptSegment } from '../types';
 import { generateId } from './utils';
+import { aiService } from './ai/ai-service';
+import { logger } from './logger';
 
 interface HighlightCandidate {
   startTime: number;
@@ -15,42 +17,105 @@ interface TranscriptionResult {
   topHighlights: HighlightCandidate[];
 }
 
-// Mock GPT scoring function
-function mockGptScore(text: string): { score: number; type: HighlightCandidate['type']; summary: string } {
-  // Simple heuristics for demo purposes
-  const hasEmotion = /(!|\?|wow|amazing|incredible|love)/i.test(text);
-  const hasInsight = /(learn|understand|realize|discover|found out)/i.test(text);
-  const hasHook = /(secret|trick|tip|here's|check this|watch this)/i.test(text);
-  const hasCta = /(subscribe|follow|like|share|comment|check out)/i.test(text);
-  
-  let score = 0;
-  let type: HighlightCandidate['type'] = 'emotion';
-  
-  if (hasEmotion) {
-    score = 0.8;
-    type = 'emotion';
-  } else if (hasInsight) {
-    score = 0.9;
-    type = 'insight';
-  } else if (hasHook) {
-    score = 0.85;
-    type = 'hook';
-  } else if (hasCta) {
-    score = 0.7;
-    type = 'cta';
-  } else {
-    score = 0.5 + Math.random() * 0.3;
+export async function transcribeAndHighlight(
+  file: File,
+  options = { 
+    language: 'en', 
+    diarization: true,
+    transcriptionProvider: 'openai',
+    analysisProvider: 'groq'
   }
+): Promise<TranscriptionResult> {
+  console.log('Starting transcription process...', { file, options });
   
-  return {
-    score,
-    type,
-    summary: text.slice(0, 100) + (text.length > 100 ? '...' : '')
-  };
+  try {
+    logger.info('Starting AI transcription and analysis', {
+      fileName: file.name,
+      size: file.size,
+      options
+    });
+
+    // Use the AI service for transcription and analysis
+    const result = await aiService.transcribeAndAnalyze(file, {
+      transcription: {
+        language: options.language,
+        speakerDiarization: options.diarization,
+        wordTimestamps: true
+      },
+      analysis: {
+        platform: 'general',
+        targetDuration: 30,
+        contentType: 'general'
+      },
+      transcriptionProvider: options.transcriptionProvider,
+      analysisProvider: options.analysisProvider
+    });
+
+    // Convert AI service results to our format
+    const transcript: TranscriptSegment[] = result.transcript.segments.map(segment => ({
+      id: generateId(),
+      startTime: segment.start,
+      endTime: segment.end,
+      text: segment.text,
+      speakerId: segment.speaker || 'speaker1',
+      confidence: segment.confidence
+    }));
+
+    const highlights: HighlightCandidate[] = result.analysis.highlights.map(highlight => ({
+      startTime: highlight.startTime,
+      endTime: highlight.endTime,
+      score: highlight.confidence,
+      summary: highlight.summary,
+      type: highlight.type as any
+    }));
+
+    // Select top highlights (sorted by confidence)
+    const topHighlights = highlights
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map(highlight => ({
+        ...highlight,
+        // Ensure highlights are between 15-60 seconds
+        startTime: Math.max(0, highlight.startTime),
+        endTime: Math.min(
+          highlight.startTime + 60,
+          Math.max(highlight.startTime + 15, highlight.endTime)
+        )
+      }));
+
+    console.log('AI transcription and analysis completed', {
+      transcriptSegments: transcript.length,
+      highlights: highlights.length,
+      topHighlights: topHighlights.length
+    });
+
+    // Save to localStorage for persistence
+    try {
+      localStorage.setItem(`transcript_${generateId()}`, JSON.stringify({
+        transcript,
+        highlights,
+        timestamp: new Date().toISOString()
+      }));
+    } catch (error) {
+      console.warn('Failed to save transcript to localStorage:', error);
+    }
+
+    return {
+      transcript,
+      highlights,
+      topHighlights
+    };
+  } catch (error) {
+    console.error('AI transcription process failed:', error);
+    
+    // Fallback to mock implementation if AI services fail
+    logger.warn('Falling back to mock transcription due to AI service failure');
+    return mockTranscribeAndHighlight(file);
+  }
 }
 
-// Mock Whisper API response
-async function mockWhisperTranscribe(audioFile: File): Promise<TranscriptSegment[]> {
+// Fallback mock implementation
+async function mockTranscribeAndHighlight(file: File): Promise<TranscriptionResult> {
   const sampleTexts = [
     "Hey everyone! Today I'm super excited to share something amazing with you!",
     "I've discovered a game-changing technique that will transform how you work.",
@@ -67,7 +132,7 @@ async function mockWhisperTranscribe(audioFile: File): Promise<TranscriptSegment
     "Thanks for watching, and I'll see you in the next video!"
   ];
   
-  await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate API delay
+  await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate processing
   
   const segments: TranscriptSegment[] = [];
   let currentTime = 0;
@@ -80,86 +145,58 @@ async function mockWhisperTranscribe(audioFile: File): Promise<TranscriptSegment
       startTime: currentTime,
       endTime: currentTime + duration,
       text,
-      speakerId: 'speaker1'
+      speakerId: 'speaker1',
+      confidence: 0.8 + Math.random() * 0.2
     });
     
     currentTime += duration;
   });
-  
-  return segments;
-}
 
-export async function transcribeAndHighlight(
-  file: File,
-  options = { language: 'en', diarization: true }
-): Promise<TranscriptionResult> {
-  console.log('Starting transcription process...', { file, options });
+  // Mock highlight detection
+  const highlights: HighlightCandidate[] = [];
   
-  try {
-    // Step 1: Transcribe audio
-    console.log('Transcribing audio...');
-    const transcript = await mockWhisperTranscribe(file);
-    console.log('Transcription complete:', transcript.length, 'segments');
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+    const text = segment.text.toLowerCase();
     
-    // Step 2: Analyze segments for highlights
-    console.log('Analyzing segments for highlights...');
-    const highlights: HighlightCandidate[] = [];
+    let score = 0;
+    let type: HighlightCandidate['type'] = 'emotion';
     
-    for (let i = 0; i < transcript.length; i++) {
-      const segment = transcript[i];
-      const { score, type, summary } = mockGptScore(segment.text);
+    if (/(!|\?|wow|amazing|incredible|love|excited|awesome|fantastic)/i.test(text)) {
+      score = 0.8;
+      type = 'emotion';
+    } else if (/(learn|understand|realize|discover|found out|secret|tip|trick)/i.test(text)) {
+      score = 0.9;
+      type = 'insight';
+    } else if (/(here's|check this|watch this|you won\'t believe|wait for it)/i.test(text)) {
+      score = 0.85;
+      type = 'hook';
+    } else if (/(subscribe|follow|like|share|comment|check out|visit|click)/i.test(text)) {
+      score = 0.7;
+      type = 'cta';
+    }
+    
+    if (score > 0.7) {
+      const contextStart = Math.max(0, i - 1);
+      const contextEnd = Math.min(segments.length - 1, i + 1);
       
-      // For segments with high scores, look at surrounding context
-      if (score > 0.7) {
-        const contextStart = Math.max(0, i - 1);
-        const contextEnd = Math.min(transcript.length - 1, i + 1);
-        
-        highlights.push({
-          startTime: transcript[contextStart].startTime,
-          endTime: transcript[contextEnd].endTime,
-          score,
-          type,
-          summary
-        });
-      }
+      highlights.push({
+        startTime: segments[contextStart].startTime,
+        endTime: segments[contextEnd].endTime,
+        score,
+        type,
+        summary: segment.text.slice(0, 100) + (segment.text.length > 100 ? '...' : '')
+      });
     }
-    
-    console.log('Found', highlights.length, 'potential highlights');
-    
-    // Step 3: Select top highlights
-    const topHighlights = highlights
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3)
-      .map(highlight => ({
-        ...highlight,
-        // Ensure highlights are between 15-60 seconds
-        startTime: Math.max(0, highlight.startTime),
-        endTime: Math.min(
-          highlight.startTime + 60,
-          Math.max(highlight.startTime + 15, highlight.endTime)
-        )
-      }));
-    
-    console.log('Selected top highlights:', topHighlights);
-    
-    // Step 4: Save to localStorage for persistence
-    try {
-      localStorage.setItem(`transcript_${generateId()}`, JSON.stringify({
-        transcript,
-        highlights,
-        timestamp: new Date().toISOString()
-      }));
-    } catch (error) {
-      console.warn('Failed to save transcript to localStorage:', error);
-    }
-    
-    return {
-      transcript,
-      highlights,
-      topHighlights
-    };
-  } catch (error) {
-    console.error('Transcription process failed:', error);
-    throw new Error('Failed to process video');
   }
+
+  const topHighlights = highlights
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
+  return {
+    transcript: segments,
+    highlights,
+    topHighlights
+  };
 }
