@@ -50,9 +50,12 @@ export const createMockTranscript = (projectId: string): TranscriptSegment[] => 
     const duration = 3 + Math.random() * 8; // Random duration between 3-11 seconds
     const segment: TranscriptSegment = {
       id: `transcript-${projectId}-${index}`,
+      projectId,
       startTime: currentTime,
       endTime: currentTime + duration,
       text,
+      speakerId: `speaker-${Math.floor(Math.random() * 2) + 1}`,
+      confidence: 0.8 + Math.random() * 0.2
     };
     currentTime += duration;
     return segment;
@@ -69,7 +72,7 @@ export const createMockClipSegments = (
   
   // First highlight (beginning)
   segments.push({
-    id: `clip-${projectId}-1`,
+    id: `clip-${projectId}-1-${Date.now()}`,
     projectId,
     startTime: transcript[0].startTime,
     endTime: transcript[3].endTime,
@@ -81,7 +84,7 @@ export const createMockClipSegments = (
   // Second highlight (middle)
   const midIndex = Math.floor(transcript.length / 2);
   segments.push({
-    id: `clip-${projectId}-2`,
+    id: `clip-${projectId}-2-${Date.now()}`,
     projectId,
     startTime: transcript[midIndex - 1].startTime,
     endTime: transcript[midIndex + 2].endTime,
@@ -92,7 +95,7 @@ export const createMockClipSegments = (
   
   // Third highlight (end)
   segments.push({
-    id: `clip-${projectId}-3`,
+    id: `clip-${projectId}-3-${Date.now()}`,
     projectId,
     startTime: transcript[transcript.length - 4].startTime,
     endTime: transcript[transcript.length - 1].endTime,
@@ -104,7 +107,7 @@ export const createMockClipSegments = (
   return segments;
 };
 
-// Generate mock projects
+// Generate mock projects with unique IDs
 export const mockProjects: VideoProject[] = [
   createMockProject('Forest Ecosystem Introduction'),
   createMockProject('Wildlife Conservation Overview', 'processing'),

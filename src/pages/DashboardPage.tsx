@@ -6,6 +6,7 @@ import Button from '../components/ui/button';
 import ProjectCard from '../components/dashboard/ProjectCard';
 import { useAppStore } from '../store';
 import { mockProjects } from '../lib/mockData';
+import { logger } from '../lib/logger';
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -16,9 +17,20 @@ const DashboardPage: React.FC = () => {
   // Load mock projects if no projects exist
   useEffect(() => {
     if (projects.length === 0) {
-      // Add mock projects to the store
+      logger.info('Loading mock projects for empty dashboard');
+      
+      // Clear any existing projects first to avoid duplicates
+      const existingIds = new Set(projects.map(p => p.id));
+      
+      // Add mock projects to the store (only if they don't already exist)
       mockProjects.forEach(project => {
-        addProject(project);
+        if (!existingIds.has(project.id)) {
+          addProject({
+            ...project,
+            // Ensure each project has a unique ID by adding a timestamp
+            id: project.id + '-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5)
+          });
+        }
       });
     }
   }, [projects.length, addProject]);
@@ -77,7 +89,7 @@ const DashboardPage: React.FC = () => {
         >
           {projects.map((project, index) => (
             <motion.div
-              key={project.id}
+              key={project.id} // Using the unique project ID as the key
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: index * 0.05 }}
