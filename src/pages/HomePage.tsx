@@ -56,7 +56,7 @@ const HomePage: React.FC = () => {
   return (
     <>
       {/* Fullscreen video background with vignette overlay */}
-      <div className="fixed inset-0 z-[-1] overflow-hidden">
+      <div className="fixed inset-0 z-0">
         <video 
           autoPlay 
           loop 
