@@ -1,14 +1,16 @@
 html,
 body {
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 body {
-  position: relative;
-  cursor: none;
+  margin: 0;
+  position: absolute;
+  width: 100%;
+  height: 100%;
 }
 
-.magic-mouse-container {
+#container {
   margin: 0;
   padding: 0;
   display: flex;
@@ -17,14 +19,9 @@ body {
   align-items: center;
   width: 100%;
   height: 100%;
-  position: fixed;
-  top: 0;
-  left: 0;
-  pointer-events: none;
-  z-index: 9999;
 }
 
-.magic-title {
+.a-title {
   position: absolute;
   color: transparent;
   -webkit-background-clip: text;
@@ -34,8 +31,7 @@ body {
   mix-blend-mode: difference;
   filter: drop-shadow(2px 4px 6px black);
 }
-
-.magic-second-title {
+.a-second-title {
   position: absolute;
   margin-top: 25vh;
   pointer-events: none;
@@ -46,25 +42,7 @@ body {
   mix-blend-mode: color-dodge;
 }
 
-canvas.magic-canvas {
+canvas {
   width: 100%;
   height: 100%;
-  position: fixed;
-  top: 0;
-  left: 0;
-  pointer-events: none;
-  z-index: 9998;
-}
-
-/* Make all buttons and interactive elements show a pointer cursor */
-button, a, [role="button"], input[type="button"], input[type="submit"], input[type="reset"], 
-.cursor-pointer, select, input[type="checkbox"], input[type="radio"] {
-  cursor: none !important;
-}
-
-/* Add a subtle highlight effect on hover for interactive elements */
-button:hover, a:hover, [role="button"]:hover, input[type="button"]:hover, 
-input[type="submit"]:hover, input[type="reset"]:hover, .cursor-pointer:hover {
-  filter: brightness(1.1);
-  transition: filter 0.2s ease;
 }

@@ -76,7 +76,7 @@ export class ErrorReporter {
       fingerprint
     });
 
-    // Send to external service in production
+    // In production, we could send to an external service
     if (import.meta.env.PROD) {
       this.sendToExternalService(report);
     }
@@ -160,10 +160,13 @@ export class ErrorReporter {
   private async sendToExternalService(report: ErrorReport): Promise<void> {
     try {
       // This is a placeholder for sending to an error tracking service
-      // We're not using Sentry or any other service by default
-      logger.debug('Error report ready for external service', { reportId: report.id });
+      // We're not using any external service by default
+      console.log('Error report ready for external service', { reportId: report.id });
+      
+      // If you want to add a real error tracking service in the future,
+      // you would implement the API call here
     } catch (error) {
-      logger.warn('Failed to send error report to external service', error as Error);
+      console.warn('Failed to send error report to external service', error);
     }
   }
 }

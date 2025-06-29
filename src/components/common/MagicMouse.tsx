@@ -8,21 +8,124 @@ const MagicMouse: React.FC = () => {
     if (!canvasRef.current || !containerRef.current) return;
 
     const canvas = canvasRef.current;
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
 
-    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-    if (!gl) {
-      console.error('WebGL not supported');
-      return;
+    let config = {
+      TEXTURE_DOWNSAMPLE: 1,
+      DENSITY_DISSIPATION: 0.98,
+      VELOCITY_DISSIPATION: 0.99,
+      PRESSURE_DISSIPATION: 0.8,
+      PRESSURE_ITERATIONS: 25,
+      CURL: 28,
+      SPLAT_RADIUS: 0.004
+    };
+
+    let pointers: any[] = [];
+    let splatStack: any[] = [];
+
+    const { gl, ext } = getWebGLContext(canvas);
+
+    function getWebGLContext(canvas: HTMLCanvasElement) {
+      const params = { alpha: false, depth: false, stencil: false, antialias: false };
+
+      let gl = canvas.getContext('webgl2', params) as WebGL2RenderingContext;
+      const isWebGL2 = !!gl;
+      if (!isWebGL2)
+        gl = (canvas.getContext('webgl', params) || canvas.getContext('experimental-webgl', params)) as WebGLRenderingContext;
+
+      let halfFloat;
+      let supportLinearFiltering;
+      if (isWebGL2) {
+        gl.getExtension('EXT_color_buffer_float');
+        supportLinearFiltering = gl.getExtension('OES_texture_float_linear');
+      } else {
+        halfFloat = gl.getExtension('OES_texture_half_float');
+        supportLinearFiltering = gl.getExtension('OES_texture_half_float_linear');
+      }
+
+      gl.clearColor(0.0, 0.0, 0.0, 1.0);
+
+      const halfFloatTexType = isWebGL2 ? gl.HALF_FLOAT : halfFloat?.HALF_FLOAT_OES;
+      let formatRGBA;
+      let formatRG;
+      let formatR;
+
+      if (isWebGL2) {
+        formatRGBA = getSupportedFormat(gl, gl.RGBA16F, gl.RGBA, halfFloatTexType);
+        formatRG = getSupportedFormat(gl, gl.RG16F, gl.RG, halfFloatTexType);
+        formatR = getSupportedFormat(gl, gl.R16F, gl.RED, halfFloatTexType);
+      } else {
+        formatRGBA = getSupportedFormat(gl, gl.RGBA, gl.RGBA, halfFloatTexType);
+        formatRG = getSupportedFormat(gl, gl.RGBA, gl.RGBA, halfFloatTexType);
+        formatR = getSupportedFormat(gl, gl.RGBA, gl.RGBA, halfFloatTexType);
+      }
+
+      return {
+        gl,
+        ext: {
+          formatRGBA,
+          formatRG,
+          formatR,
+          halfFloatTexType,
+          supportLinearFiltering
+        }
+      };
     }
 
-    // Helper functions and classes
+    function getSupportedFormat(gl: WebGLRenderingContext, internalFormat: number, format: number, type: number) {
+      if (!supportRenderTextureFormat(gl, internalFormat, format, type)) {
+        switch (internalFormat) {
+          case (gl as WebGL2RenderingContext).R16F:
+            return getSupportedFormat(gl, (gl as WebGL2RenderingContext).RG16F, gl.RG, type);
+          case (gl as WebGL2RenderingContext).RG16F:
+            return getSupportedFormat(gl, (gl as WebGL2RenderingContext).RGBA16F, gl.RGBA, type);
+          default:
+            return null;
+        }
+      }
+
+      return {
+        internalFormat,
+        format
+      };
+    }
+
+    function supportRenderTextureFormat(gl: WebGLRenderingContext, internalFormat: number, format: number, type: number) {
+      let texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, 4, 4, 0, format, type, null);
+
+      let fbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+
+      const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+      return status === gl.FRAMEBUFFER_COMPLETE;
+    }
+
+    function pointerPrototype() {
+      this.id = -1;
+      this.x = 0;
+      this.y = 0;
+      this.dx = 0;
+      this.dy = 0;
+      this.down = false;
+      this.moved = false;
+      this.color = [30, 0, 300];
+    }
+
+    pointers.push(new pointerPrototype());
+
     class GLProgram {
       uniforms: Record<string, WebGLUniformLocation>;
       program: WebGLProgram;
 
-      constructor(gl: WebGLRenderingContext, vertexShader: WebGLShader, fragmentShader: WebGLShader) {
+      constructor(vertexShader: WebGLShader, fragmentShader: WebGLShader) {
         this.uniforms = {};
         this.program = gl.createProgram()!;
 
@@ -45,21 +148,8 @@ const MagicMouse: React.FC = () => {
       }
     }
 
-    function pointerPrototype() {
-      this.id = -1;
-      this.x = 0;
-      this.y = 0;
-      this.dx = 0;
-      this.dy = 0;
-      this.down = false;
-      this.moved = false;
-      this.color = [30, 0, 300];
-    }
-
-    function compileShader(gl: WebGLRenderingContext, type: number, source: string) {
-      const shader = gl.createShader(type);
-      if (!shader) throw new Error('Failed to create shader');
-      
+    function compileShader(type: number, source: string) {
+      const shader = gl.createShader(type)!;
       gl.shaderSource(shader, source);
       gl.compileShader(shader);
 
@@ -69,106 +159,7 @@ const MagicMouse: React.FC = () => {
       return shader;
     }
 
-    function getSupportedFormat(gl: WebGLRenderingContext, internalFormat: number, format: number, type: number) {
-      if (!supportRenderTextureFormat(gl, internalFormat, format, type)) {
-        switch (internalFormat) {
-          case (gl as WebGL2RenderingContext).R16F:
-            return getSupportedFormat(gl, (gl as WebGL2RenderingContext).RG16F, gl.RG, type);
-          case (gl as WebGL2RenderingContext).RG16F:
-            return getSupportedFormat(gl, (gl as WebGL2RenderingContext).RGBA16F, gl.RGBA, type);
-          default:
-            return null;
-        }
-      }
-
-      return { internalFormat, format };
-    }
-
-    function supportRenderTextureFormat(gl: WebGLRenderingContext, internalFormat: number, format: number, type: number) {
-      let texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, 4, 4, 0, format, type, null);
-
-      let fbo = gl.createFramebuffer();
-      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-
-      const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
-      return status === gl.FRAMEBUFFER_COMPLETE;
-    }
-
-    function getWebGLContext(canvas: HTMLCanvasElement) {
-      const params = { alpha: false, depth: false, stencil: false, antialias: false };
-      let gl = canvas.getContext('webgl2', params);
-      const isWebGL2 = !!gl;
-      
-      if (!isWebGL2) {
-        gl = (canvas.getContext('webgl', params) || canvas.getContext('experimental-webgl', params)) as WebGLRenderingContext;
-      }
-
-      if (!gl) {
-        throw new Error('WebGL not supported');
-      }
-
-      let halfFloat;
-      let supportLinearFiltering;
-      
-      if (isWebGL2) {
-        gl.getExtension('EXT_color_buffer_float');
-        supportLinearFiltering = gl.getExtension('OES_texture_float_linear');
-      } else {
-        halfFloat = gl.getExtension('OES_texture_half_float');
-        supportLinearFiltering = gl.getExtension('OES_texture_half_float_linear');
-      }
-
-      gl.clearColor(0.0, 0.0, 0.0, 1.0);
-
-      const halfFloatTexType = isWebGL2 ? (gl as WebGL2RenderingContext).HALF_FLOAT : halfFloat?.HALF_FLOAT_OES;
-      let formatRGBA, formatRG, formatR;
-
-      if (isWebGL2) {
-        formatRGBA = getSupportedFormat(gl, (gl as WebGL2RenderingContext).RGBA16F, gl.RGBA, halfFloatTexType);
-        formatRG = getSupportedFormat(gl, (gl as WebGL2RenderingContext).RG16F, gl.RG, halfFloatTexType);
-        formatR = getSupportedFormat(gl, (gl as WebGL2RenderingContext).R16F, gl.RED, halfFloatTexType);
-      } else {
-        formatRGBA = getSupportedFormat(gl, gl.RGBA, gl.RGBA, halfFloatTexType);
-        formatRG = getSupportedFormat(gl, gl.RGBA, gl.RGBA, halfFloatTexType);
-        formatR = getSupportedFormat(gl, gl.RGBA, gl.RGBA, halfFloatTexType);
-      }
-
-      return {
-        gl,
-        ext: {
-          formatRGBA,
-          formatRG,
-          formatR,
-          halfFloatTexType,
-          supportLinearFiltering
-        }
-      };
-    }
-
-    // Initialize pointers
-    const pointers: any[] = [];
-    const pointer = new pointerPrototype();
-    pointers.push(pointer);
-
-    // Initialize WebGL context and programs
-    const { ext } = getWebGLContext(canvas);
-    let textureWidth: number;
-    let textureHeight: number;
-    let density: any;
-    let velocity: any;
-    let divergence: any;
-    let curl: any;
-    let pressure: any;
-
-    // Compile shaders
-    const baseVertexShader = compileShader(gl, gl.VERTEX_SHADER, `
+    const baseVertexShader = compileShader(gl.VERTEX_SHADER, `
       precision highp float;
       precision mediump sampler2D;
 
@@ -190,7 +181,7 @@ const MagicMouse: React.FC = () => {
       }
     `);
 
-    const clearShader = compileShader(gl, gl.FRAGMENT_SHADER, `
+    const clearShader = compileShader(gl.FRAGMENT_SHADER, `
       precision highp float;
       precision mediump sampler2D;
 
@@ -203,7 +194,7 @@ const MagicMouse: React.FC = () => {
       }
     `);
 
-    const displayShader = compileShader(gl, gl.FRAGMENT_SHADER, `
+    const displayShader = compileShader(gl.FRAGMENT_SHADER, `
       precision highp float;
       precision mediump sampler2D;
 
@@ -215,7 +206,7 @@ const MagicMouse: React.FC = () => {
       }
     `);
 
-    const splatShader = compileShader(gl, gl.FRAGMENT_SHADER, `
+    const splatShader = compileShader(gl.FRAGMENT_SHADER, `
       precision highp float;
       precision mediump sampler2D;
 
@@ -235,25 +226,7 @@ const MagicMouse: React.FC = () => {
       }
     `);
 
-    const advectionShader = compileShader(gl, gl.FRAGMENT_SHADER, `
-      precision highp float;
-      precision mediump sampler2D;
-
-      varying vec2 vUv;
-      uniform sampler2D uVelocity;
-      uniform sampler2D uSource;
-      uniform vec2 texelSize;
-      uniform float dt;
-      uniform float dissipation;
-
-      void main () {
-          vec2 coord = vUv - dt * texture2D(uVelocity, vUv).xy * texelSize;
-          gl_FragColor = dissipation * texture2D(uSource, coord);
-          gl_FragColor.a = 1.0;
-      }
-    `);
-
-    const advectionManualFilteringShader = compileShader(gl, gl.FRAGMENT_SHADER, `
+    const advectionManualFilteringShader = compileShader(gl.FRAGMENT_SHADER, `
       precision highp float;
       precision mediump sampler2D;
 
@@ -284,7 +257,25 @@ const MagicMouse: React.FC = () => {
       }
     `);
 
-    const divergenceShader = compileShader(gl, gl.FRAGMENT_SHADER, `
+    const advectionShader = compileShader(gl.FRAGMENT_SHADER, `
+      precision highp float;
+      precision mediump sampler2D;
+
+      varying vec2 vUv;
+      uniform sampler2D uVelocity;
+      uniform sampler2D uSource;
+      uniform vec2 texelSize;
+      uniform float dt;
+      uniform float dissipation;
+
+      void main () {
+          vec2 coord = vUv - dt * texture2D(uVelocity, vUv).xy * texelSize;
+          gl_FragColor = dissipation * texture2D(uSource, coord);
+          gl_FragColor.a = 1.0;
+      }
+    `);
+
+    const divergenceShader = compileShader(gl.FRAGMENT_SHADER, `
       precision highp float;
       precision mediump sampler2D;
 
@@ -314,7 +305,7 @@ const MagicMouse: React.FC = () => {
       }
     `);
 
-    const curlShader = compileShader(gl, gl.FRAGMENT_SHADER, `
+    const curlShader = compileShader(gl.FRAGMENT_SHADER, `
       precision highp float;
       precision mediump sampler2D;
 
@@ -335,7 +326,7 @@ const MagicMouse: React.FC = () => {
       }
     `);
 
-    const vorticityShader = compileShader(gl, gl.FRAGMENT_SHADER, `
+    const vorticityShader = compileShader(gl.FRAGMENT_SHADER, `
       precision highp float;
       precision mediump sampler2D;
 
@@ -358,7 +349,7 @@ const MagicMouse: React.FC = () => {
       }
     `);
 
-    const pressureShader = compileShader(gl, gl.FRAGMENT_SHADER, `
+    const pressureShader = compileShader(gl.FRAGMENT_SHADER, `
       precision highp float;
       precision mediump sampler2D;
 
@@ -387,7 +378,7 @@ const MagicMouse: React.FC = () => {
       }
     `);
 
-    const gradientSubtractShader = compileShader(gl, gl.FRAGMENT_SHADER, `
+    const gradientSubtractShader = compileShader(gl.FRAGMENT_SHADER, `
       precision highp float;
       precision mediump sampler2D;
 
@@ -414,6 +405,30 @@ const MagicMouse: React.FC = () => {
           gl_FragColor = vec4(velocity, 0.0, 1.0);
       }
     `);
+
+    let textureWidth: number;
+    let textureHeight: number;
+    let density: any;
+    let velocity: any;
+    let divergence: any;
+    let curl: any;
+    let pressure: any;
+    
+    function initFramebuffers() {
+      textureWidth = gl.drawingBufferWidth >> config.TEXTURE_DOWNSAMPLE;
+      textureHeight = gl.drawingBufferHeight >> config.TEXTURE_DOWNSAMPLE;
+
+      const texType = ext.halfFloatTexType;
+      const rgba = ext.formatRGBA;
+      const rg = ext.formatRG;
+      const r = ext.formatR;
+
+      density = createDoubleFBO(2, textureWidth, textureHeight, rgba.internalFormat, rgba.format, texType, ext.supportLinearFiltering ? gl.LINEAR : gl.NEAREST);
+      velocity = createDoubleFBO(0, textureWidth, textureHeight, rg.internalFormat, rg.format, texType, ext.supportLinearFiltering ? gl.LINEAR : gl.NEAREST);
+      divergence = createFBO(4, textureWidth, textureHeight, r.internalFormat, r.format, texType, gl.NEAREST);
+      curl = createFBO(5, textureWidth, textureHeight, r.internalFormat, r.format, texType, gl.NEAREST);
+      pressure = createDoubleFBO(6, textureWidth, textureHeight, r.internalFormat, r.format, texType, gl.NEAREST);
+    }
 
     function createFBO(texId: number, w: number, h: number, internalFormat: number, format: number, type: number, param: number) {
       gl.activeTexture(gl.TEXTURE0 + texId);
@@ -453,48 +468,18 @@ const MagicMouse: React.FC = () => {
       };
     }
 
-    function initFramebuffers() {
-      textureWidth = gl.drawingBufferWidth >> config.TEXTURE_DOWNSAMPLE;
-      textureHeight = gl.drawingBufferHeight >> config.TEXTURE_DOWNSAMPLE;
-
-      const texType = ext.halfFloatTexType;
-      const rgba = ext.formatRGBA;
-      const rg = ext.formatRG;
-      const r = ext.formatR;
-
-      density = createDoubleFBO(2, textureWidth, textureHeight, rgba.internalFormat, rgba.format, texType, ext.supportLinearFiltering ? gl.LINEAR : gl.NEAREST);
-      velocity = createDoubleFBO(0, textureWidth, textureHeight, rg.internalFormat, rg.format, texType, ext.supportLinearFiltering ? gl.LINEAR : gl.NEAREST);
-      divergence = createFBO(4, textureWidth, textureHeight, r.internalFormat, r.format, texType, gl.NEAREST);
-      curl = createFBO(5, textureWidth, textureHeight, r.internalFormat, r.format, texType, gl.NEAREST);
-      pressure = createDoubleFBO(6, textureWidth, textureHeight, r.internalFormat, r.format, texType, gl.NEAREST);
-    }
-
-    // Configuration
-    const config = {
-      TEXTURE_DOWNSAMPLE: 1,
-      DENSITY_DISSIPATION: 0.98,
-      VELOCITY_DISSIPATION: 0.99,
-      PRESSURE_DISSIPATION: 0.8,
-      PRESSURE_ITERATIONS: 25,
-      CURL: 28,
-      SPLAT_RADIUS: 0.004
-    };
-
-    // Initialize programs
-    const clearProgram = new GLProgram(gl, baseVertexShader, clearShader);
-    const displayProgram = new GLProgram(gl, baseVertexShader, displayShader);
-    const splatProgram = new GLProgram(gl, baseVertexShader, splatShader);
-    const advectionProgram = new GLProgram(gl, baseVertexShader, ext.supportLinearFiltering ? advectionShader : advectionManualFilteringShader);
-    const divergenceProgram = new GLProgram(gl, baseVertexShader, divergenceShader);
-    const curlProgram = new GLProgram(gl, baseVertexShader, curlShader);
-    const vorticityProgram = new GLProgram(gl, baseVertexShader, vorticityShader);
-    const pressureProgram = new GLProgram(gl, baseVertexShader, pressureShader);
-    const gradienSubtractProgram = new GLProgram(gl, baseVertexShader, gradientSubtractShader);
-
-    // Initialize framebuffers
     initFramebuffers();
 
-    // Setup blit function
+    const clearProgram = new GLProgram(baseVertexShader, clearShader);
+    const displayProgram = new GLProgram(baseVertexShader, displayShader);
+    const splatProgram = new GLProgram(baseVertexShader, splatShader);
+    const advectionProgram = new GLProgram(baseVertexShader, ext.supportLinearFiltering ? advectionShader : advectionManualFilteringShader);
+    const divergenceProgram = new GLProgram(baseVertexShader, divergenceShader);
+    const curlProgram = new GLProgram(baseVertexShader, curlShader);
+    const vorticityProgram = new GLProgram(baseVertexShader, vorticityShader);
+    const pressureProgram = new GLProgram(baseVertexShader, pressureShader);
+    const gradienSubtractProgram = new GLProgram(baseVertexShader, gradientSubtractShader);
+
     const blit = (() => {
       gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1, 1, 1, 1, -1]), gl.STATIC_DRAW);
@@ -509,47 +494,10 @@ const MagicMouse: React.FC = () => {
       };
     })();
 
-    function splat(x: number, y: number, dx: number, dy: number, color: number[]) {
-      splatProgram.bind();
-      gl.uniform1i(splatProgram.uniforms.uTarget, velocity.read[2]);
-      gl.uniform1f(splatProgram.uniforms.aspectRatio, canvas.width / canvas.height);
-      gl.uniform2f(splatProgram.uniforms.point, x / canvas.width, 1.0 - y / canvas.height);
-      gl.uniform3f(splatProgram.uniforms.color, dx, -dy, 1.0);
-      gl.uniform1f(splatProgram.uniforms.radius, config.SPLAT_RADIUS);
-      blit(velocity.write[1]);
-      velocity.swap();
-
-      gl.uniform1i(splatProgram.uniforms.uTarget, density.read[2]);
-      gl.uniform3f(splatProgram.uniforms.color, color[0] * 0.3, color[1] * 0.3, color[2] * 0.3);
-      blit(density.write[1]);
-      density.swap();
-    }
-
-    function multipleSplats(amount: number) {
-      for (let i = 0; i < amount; i++) {
-        const color = [Math.random() * 10, Math.random() * 10, Math.random() * 10];
-        const x = canvas.width * Math.random();
-        const y = canvas.height * Math.random();
-        const dx = 1000 * (Math.random() - 0.5);
-        const dy = 1000 * (Math.random() - 0.5);
-        splat(x, y, dx, dy, color);
-      }
-    }
-
-    function resizeCanvas() {
-      if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
-        canvas.width = canvas.clientWidth;
-        canvas.height = canvas.clientHeight;
-        initFramebuffers();
-      }
-    }
-
-    // Initial splats
     let lastTime = Date.now();
-    multipleSplats(parseInt(String(Math.random() * 20)) + 5);
+    multipleSplats(parseInt(Math.random() * 20 + '') + 5);
+    update();
 
-    // Animation loop
-    let animationFrameId: number;
     function update() {
       resizeCanvas();
 
@@ -557,6 +505,9 @@ const MagicMouse: React.FC = () => {
       lastTime = Date.now();
 
       gl.viewport(0, 0, textureWidth, textureHeight);
+
+      if (splatStack.length > 0)
+        multipleSplats(splatStack.pop());
 
       advectionProgram.bind();
       gl.uniform2f(advectionProgram.uniforms.texelSize, 1.0 / textureWidth, 1.0 / textureHeight);
@@ -633,14 +584,45 @@ const MagicMouse: React.FC = () => {
       gl.uniform1i(displayProgram.uniforms.uTexture, density.read[2]);
       blit(null);
 
-      animationFrameId = requestAnimationFrame(update);
+      requestAnimationFrame(update);
     }
 
-    // Start animation
-    update();
+    function splat(x: number, y: number, dx: number, dy: number, color: number[]) {
+      splatProgram.bind();
+      gl.uniform1i(splatProgram.uniforms.uTarget, velocity.read[2]);
+      gl.uniform1f(splatProgram.uniforms.aspectRatio, canvas.width / canvas.height);
+      gl.uniform2f(splatProgram.uniforms.point, x / canvas.width, 1.0 - y / canvas.height);
+      gl.uniform3f(splatProgram.uniforms.color, dx, -dy, 1.0);
+      gl.uniform1f(splatProgram.uniforms.radius, config.SPLAT_RADIUS);
+      blit(velocity.write[1]);
+      velocity.swap();
 
-    // Event listeners
-    canvas.addEventListener('mousemove', (e) => {
+      gl.uniform1i(splatProgram.uniforms.uTarget, density.read[2]);
+      gl.uniform3f(splatProgram.uniforms.color, color[0] * 0.3, color[1] * 0.3, color[2] * 0.3);
+      blit(density.write[1]);
+      density.swap();
+    }
+
+    function multipleSplats(amount: number) {
+      for (let i = 0; i < amount; i++) {
+        const color = [Math.random() * 10, Math.random() * 10, Math.random() * 10];
+        const x = canvas.width * Math.random();
+        const y = canvas.height * Math.random();
+        const dx = 1000 * (Math.random() - 0.5);
+        const dy = 1000 * (Math.random() - 0.5);
+        splat(x, y, dx, dy, color);
+      }
+    }
+
+    function resizeCanvas() {
+      if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+        initFramebuffers();
+      }
+    }
+
+    canvas.addEventListener('mousemove', e => {
       pointers[0].moved = pointers[0].down;
       pointers[0].dx = (e.offsetX - pointers[0].x) * 10.0;
       pointers[0].dy = (e.offsetY - pointers[0].y) * 10.0;
@@ -648,7 +630,7 @@ const MagicMouse: React.FC = () => {
       pointers[0].y = e.offsetY;
     });
 
-    canvas.addEventListener('touchmove', (e) => {
+    canvas.addEventListener('touchmove', e => {
       e.preventDefault();
       const touches = e.targetTouches;
       for (let i = 0; i < touches.length; i++) {
@@ -666,7 +648,7 @@ const MagicMouse: React.FC = () => {
       pointers[0].color = [Math.random() + 0.2, Math.random() + 0.2, Math.random() + 0.2];
     });
 
-    canvas.addEventListener('touchstart', (e) => {
+    canvas.addEventListener('touchstart', e => {
       e.preventDefault();
       const touches = e.targetTouches;
       for (let i = 0; i < touches.length; i++) {
@@ -685,7 +667,7 @@ const MagicMouse: React.FC = () => {
       pointers[0].down = false;
     });
 
-    window.addEventListener('touchend', (e) => {
+    window.addEventListener('touchend', e => {
       const touches = e.changedTouches;
       for (let i = 0; i < touches.length; i++)
         for (let j = 0; j < pointers.length; j++)
@@ -700,14 +682,13 @@ const MagicMouse: React.FC = () => {
 
     // Cleanup on unmount
     return () => {
-      cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', resizeCanvas);
     };
   }, []);
 
   return (
-    <div ref={containerRef} className="fixed inset-0 pointer-events-none z-50">
-      <canvas ref={canvasRef} className="w-full h-full" />
+    <div ref={containerRef} id="container">
+      <canvas ref={canvasRef} />
     </div>
   );
 };
