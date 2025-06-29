@@ -1,67 +1,81 @@
 /*
-  # Core Application Schema
-
-  1. New Tables
-    - `user_profiles` - Extended user profile information
-    - `video_projects` - User video projects
-    - `clip_segments` - Video clip segments
-    - `transcript_segments` - Video transcript data
-    - `analytics_events` - Analytics tracking
-    - `user_feedback` - User feedback for AI predictions
-    - `prediction_parameters` - AI model parameters per user
-
-  2. Custom Types
-    - `project_status` - Video project processing status
-    - `segment_type` - Type of clip segment
-    - `event_type` - Analytics event types
-    - `plan_type` - User subscription plans
-
+  # Fix Enum Type Conflicts
+  
+  This migration safely creates enum types and core tables, checking for existing types first.
+  
+  1. Enum Types (with existence checks)
+    - project_status
+    - segment_type  
+    - event_type
+    - plan_type
+    
+  2. Core Tables
+    - user_profiles
+    - video_projects
+    - clip_segments
+    - transcript_segments
+    - analytics_events
+    - user_feedback
+    - prediction_parameters
+    
   3. Security
-    - Row Level Security enabled on all tables
-    - Policies for user data isolation
-    - Proper foreign key relationships
-
-  4. Functions
-    - Trigger functions for updated_at timestamps
-    - User profile creation trigger
+    - Row Level Security (RLS) enabled
+    - Proper policies for data access
+    - Automatic user profile creation trigger
 */
 
--- Create custom enum types
-CREATE TYPE project_status AS ENUM (
-    'uploading',
-    'processing', 
-    'transcribing',
-    'analyzing',
-    'ready',
-    'error',
-    'archived'
-);
+-- Create enum types only if they don't exist
+DO $$ BEGIN
+    CREATE TYPE project_status AS ENUM (
+        'uploading',
+        'processing', 
+        'transcribing',
+        'analyzing',
+        'ready',
+        'error',
+        'archived'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
-CREATE TYPE segment_type AS ENUM (
-    'highlight',
-    'manual',
-    'auto_detected',
-    'user_created',
-    'ai_suggested'
-);
+DO $$ BEGIN
+    CREATE TYPE segment_type AS ENUM (
+        'highlight',
+        'manual',
+        'auto_detected',
+        'user_created',
+        'ai_suggested'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
-CREATE TYPE event_type AS ENUM (
-    'view',
-    'like',
-    'comment',
-    'share',
-    'download',
-    'export',
-    'upload'
-);
+DO $$ BEGIN
+    CREATE TYPE event_type AS ENUM (
+        'view',
+        'like',
+        'comment',
+        'share',
+        'download',
+        'export',
+        'upload'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
-CREATE TYPE plan_type AS ENUM (
-    'free',
-    'pro',
-    'enterprise'
-);
+DO $$ BEGIN
+    CREATE TYPE plan_type AS ENUM (
+        'free',
+        'pro',
+        'enterprise'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
--- Create updated_at trigger function
+-- Create updated_at trigger function if it doesn't exist
 CREATE OR REPLACE FUNCTION handle_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -100,12 +114,17 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     deleted_at timestamptz
 );
 
--- Add indexes for better performance
-CREATE INDEX idx_user_profiles_plan_type ON user_profiles(plan_type);
-CREATE INDEX idx_user_profiles_last_active ON user_profiles(last_active_at);
+-- Add indexes for better performance (only if they don't exist)
+CREATE INDEX IF NOT EXISTS idx_user_profiles_plan_type ON user_profiles(plan_type);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_last_active ON user_profiles(last_active_at);
 
 -- Enable RLS
 ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist and recreate them
+DROP POLICY IF EXISTS "Users can view their own profile" ON user_profiles;
+DROP POLICY IF EXISTS "Users can insert their own profile" ON user_profiles;
+DROP POLICY IF EXISTS "Users can update their own profile" ON user_profiles;
 
 -- RLS Policies for user_profiles
 CREATE POLICY "Users can view their own profile"
@@ -127,6 +146,7 @@ CREATE POLICY "Users can update their own profile"
     USING (id = auth.uid());
 
 -- Add trigger for updated_at
+DROP TRIGGER IF EXISTS handle_user_profiles_updated_at ON user_profiles;
 CREATE TRIGGER handle_user_profiles_updated_at
     BEFORE UPDATE ON user_profiles
     FOR EACH ROW
@@ -156,13 +176,19 @@ CREATE TABLE IF NOT EXISTS video_projects (
 );
 
 -- Add indexes
-CREATE INDEX idx_video_projects_user_id ON video_projects(user_id);
-CREATE INDEX idx_video_projects_status ON video_projects(status);
-CREATE INDEX idx_video_projects_created_at ON video_projects(created_at DESC);
-CREATE INDEX idx_video_projects_user_status ON video_projects(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_video_projects_user_id ON video_projects(user_id);
+CREATE INDEX IF NOT EXISTS idx_video_projects_status ON video_projects(status);
+CREATE INDEX IF NOT EXISTS idx_video_projects_created_at ON video_projects(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_video_projects_user_status ON video_projects(user_id, status);
 
 -- Enable RLS
 ALTER TABLE video_projects ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies and recreate
+DROP POLICY IF EXISTS "Users can view their own projects" ON video_projects;
+DROP POLICY IF EXISTS "Users can insert their own projects" ON video_projects;
+DROP POLICY IF EXISTS "Users can update their own projects" ON video_projects;
+DROP POLICY IF EXISTS "Users can delete their own projects" ON video_projects;
 
 -- RLS Policies for video_projects
 CREATE POLICY "Users can view their own projects"
@@ -190,6 +216,7 @@ CREATE POLICY "Users can delete their own projects"
     USING (user_id = auth.uid());
 
 -- Add trigger for updated_at
+DROP TRIGGER IF EXISTS handle_video_projects_updated_at ON video_projects;
 CREATE TRIGGER handle_video_projects_updated_at
     BEFORE UPDATE ON video_projects
     FOR EACH ROW
@@ -214,13 +241,19 @@ CREATE TABLE IF NOT EXISTS clip_segments (
 );
 
 -- Add indexes
-CREATE INDEX idx_clip_segments_project_id ON clip_segments(project_id);
-CREATE INDEX idx_clip_segments_highlight ON clip_segments(is_highlight);
-CREATE INDEX idx_clip_segments_confidence ON clip_segments(confidence DESC);
-CREATE INDEX idx_clip_segments_time_range ON clip_segments(start_time, end_time);
+CREATE INDEX IF NOT EXISTS idx_clip_segments_project_id ON clip_segments(project_id);
+CREATE INDEX IF NOT EXISTS idx_clip_segments_highlight ON clip_segments(is_highlight);
+CREATE INDEX IF NOT EXISTS idx_clip_segments_confidence ON clip_segments(confidence DESC);
+CREATE INDEX IF NOT EXISTS idx_clip_segments_time_range ON clip_segments(start_time, end_time);
 
 -- Enable RLS
 ALTER TABLE clip_segments ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies and recreate
+DROP POLICY IF EXISTS "Users can view clips from their projects" ON clip_segments;
+DROP POLICY IF EXISTS "Users can insert clips to their projects" ON clip_segments;
+DROP POLICY IF EXISTS "Users can update clips from their projects" ON clip_segments;
+DROP POLICY IF EXISTS "Users can delete clips from their projects" ON clip_segments;
 
 -- RLS Policies for clip_segments
 CREATE POLICY "Users can view clips from their projects"
@@ -268,6 +301,7 @@ CREATE POLICY "Users can delete clips from their projects"
     );
 
 -- Add trigger for updated_at
+DROP TRIGGER IF EXISTS handle_clip_segments_updated_at ON clip_segments;
 CREATE TRIGGER handle_clip_segments_updated_at
     BEFORE UPDATE ON clip_segments
     FOR EACH ROW
@@ -289,12 +323,16 @@ CREATE TABLE IF NOT EXISTS transcript_segments (
 );
 
 -- Add indexes
-CREATE INDEX idx_transcript_segments_project_id ON transcript_segments(project_id);
-CREATE INDEX idx_transcript_segments_time_range ON transcript_segments(start_time, end_time);
-CREATE INDEX idx_transcript_segments_speaker ON transcript_segments(speaker_id);
+CREATE INDEX IF NOT EXISTS idx_transcript_segments_project_id ON transcript_segments(project_id);
+CREATE INDEX IF NOT EXISTS idx_transcript_segments_time_range ON transcript_segments(start_time, end_time);
+CREATE INDEX IF NOT EXISTS idx_transcript_segments_speaker ON transcript_segments(speaker_id);
 
 -- Enable RLS
 ALTER TABLE transcript_segments ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies and recreate
+DROP POLICY IF EXISTS "Users can view transcripts from their projects" ON transcript_segments;
+DROP POLICY IF EXISTS "Users can insert transcripts to their projects" ON transcript_segments;
 
 -- RLS Policies for transcript_segments
 CREATE POLICY "Users can view transcripts from their projects"
@@ -340,14 +378,19 @@ CREATE TABLE IF NOT EXISTS analytics_events (
 );
 
 -- Add indexes
-CREATE INDEX idx_analytics_events_user_id ON analytics_events(user_id);
-CREATE INDEX idx_analytics_events_project_id ON analytics_events(project_id);
-CREATE INDEX idx_analytics_events_clip_id ON analytics_events(clip_id);
-CREATE INDEX idx_analytics_events_platform ON analytics_events(platform);
-CREATE INDEX idx_analytics_events_created_at ON analytics_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_user_id ON analytics_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_project_id ON analytics_events(project_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_clip_id ON analytics_events(clip_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_platform ON analytics_events(platform);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_created_at ON analytics_events(created_at DESC);
 
 -- Enable RLS
 ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies and recreate
+DROP POLICY IF EXISTS "Users can view their own analytics" ON analytics_events;
+DROP POLICY IF EXISTS "Users can insert their own analytics" ON analytics_events;
+DROP POLICY IF EXISTS "Users can update their own analytics" ON analytics_events;
 
 -- RLS Policies for analytics_events
 CREATE POLICY "Users can view their own analytics"
@@ -369,6 +412,7 @@ CREATE POLICY "Users can update their own analytics"
     USING (user_id = auth.uid());
 
 -- Add trigger for updated_at
+DROP TRIGGER IF EXISTS handle_analytics_events_updated_at ON analytics_events;
 CREATE TRIGGER handle_analytics_events_updated_at
     BEFORE UPDATE ON analytics_events
     FOR EACH ROW
@@ -387,11 +431,15 @@ CREATE TABLE IF NOT EXISTS user_feedback (
 );
 
 -- Add indexes
-CREATE INDEX idx_user_feedback_user_id ON user_feedback(user_id);
-CREATE INDEX idx_user_feedback_created_at ON user_feedback(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_feedback_user_id ON user_feedback(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_feedback_created_at ON user_feedback(created_at DESC);
 
 -- Enable RLS
 ALTER TABLE user_feedback ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies and recreate
+DROP POLICY IF EXISTS "Users can view their own feedback" ON user_feedback;
+DROP POLICY IF EXISTS "Users can insert their own feedback" ON user_feedback;
 
 -- RLS Policies for user_feedback
 CREATE POLICY "Users can view their own feedback"
@@ -424,10 +472,15 @@ CREATE TABLE IF NOT EXISTS prediction_parameters (
 );
 
 -- Add indexes
-CREATE INDEX idx_prediction_parameters_user_id ON prediction_parameters(user_id);
+CREATE INDEX IF NOT EXISTS idx_prediction_parameters_user_id ON prediction_parameters(user_id);
 
 -- Enable RLS
 ALTER TABLE prediction_parameters ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies and recreate
+DROP POLICY IF EXISTS "Users can view their own prediction parameters" ON prediction_parameters;
+DROP POLICY IF EXISTS "Users can insert their own prediction parameters" ON prediction_parameters;
+DROP POLICY IF EXISTS "Users can update their own prediction parameters" ON prediction_parameters;
 
 -- RLS Policies for prediction_parameters
 CREATE POLICY "Users can view their own prediction parameters"
@@ -449,12 +502,14 @@ CREATE POLICY "Users can update their own prediction parameters"
     USING (user_id = auth.uid());
 
 -- Add trigger for updated_at
+DROP TRIGGER IF EXISTS handle_prediction_parameters_updated_at ON prediction_parameters;
 CREATE TRIGGER handle_prediction_parameters_updated_at
     BEFORE UPDATE ON prediction_parameters
     FOR EACH ROW
     EXECUTE FUNCTION handle_updated_at();
 
--- Create helpful views
+-- Create helpful views (drop and recreate to avoid conflicts)
+DROP VIEW IF EXISTS user_project_stats;
 CREATE VIEW user_project_stats WITH (security_invoker) AS
 SELECT 
     user_id,
@@ -468,6 +523,7 @@ FROM video_projects
 WHERE deleted_at IS NULL
 GROUP BY user_id;
 
+DROP VIEW IF EXISTS user_analytics_summary;
 CREATE VIEW user_analytics_summary WITH (security_invoker) AS
 SELECT 
     user_id,
@@ -482,6 +538,7 @@ FROM analytics_events
 GROUP BY user_id;
 
 -- Create a view for user files (if using Supabase Storage)
+DROP VIEW IF EXISTS user_files;
 CREATE VIEW user_files WITH (security_invoker) AS
 SELECT 
     name as file_name,
@@ -510,6 +567,14 @@ BEGIN
         NEW.created_at
     );
     RETURN NEW;
+EXCEPTION
+    WHEN unique_violation THEN
+        -- Profile already exists, just return NEW
+        RETURN NEW;
+    WHEN OTHERS THEN
+        -- Log the error but don't fail the user creation
+        RAISE WARNING 'Failed to create user profile for user %: %', NEW.id, SQLERRM;
+        RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
