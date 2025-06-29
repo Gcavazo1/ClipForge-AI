@@ -1,9 +1,9 @@
-import { supabase } from './supabase';
-import { VideoProject, ClipSegment, TranscriptSegment, User } from '../types';
-import { logger } from './logger';
-import { OptimizedDatabaseService } from './performance/optimized-database';
-import { measurePerformance } from './performance/performance-monitor';
-import { withRetry } from './error-handling/retry-manager';
+import { supabase } from './supabase.js';
+import { VideoProject, ClipSegment, TranscriptSegment, User } from '../types/index.js';
+import { logger } from './logger.js';
+import { OptimizedDatabaseService } from './performance/optimized-database.js';
+import { measurePerformance } from './performance/performance-monitor.js';
+import { withRetry } from './error-handling/retry-manager.js';
 
 // Enhanced database service for video projects
 export class VideoProjectService {
