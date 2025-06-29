@@ -55,6 +55,57 @@
   }
 }
 
+/* Stylish loader animation */
+.loader {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin: auto;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.loader span {
+  display: block;
+  width: 7px;
+  height: 10%;
+  border-radius: 14px;
+  margin-right: 5px;
+  float: left;
+  margin-top: 25%;
+}
+
+.loader span:last-child {
+  margin-right: 0px;
+}
+
+@keyframes load {
+  0% {
+    background: theme('colors.primary.400');
+    margin-top: 25%;
+    height: 10%;
+  }
+  50% {
+    background: theme('colors.primary.600');
+    height: 100%;
+    margin-top: 0%;
+  }
+  100% {
+    background: theme('colors.primary.400');
+    height: 10%;
+    margin-top: 25%;
+  }
+}
+
+.animate-load {
+  animation: load 2.5s infinite linear;
+}
+
 :root {
   --nav-height: 64px;
   --sidebar-width: 240px;

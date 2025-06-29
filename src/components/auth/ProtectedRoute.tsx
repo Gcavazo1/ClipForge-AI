@@ -1,8 +1,9 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Loader2 } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { logger } from '../../lib/logger';
+import Loader from '../ui/loader';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -30,22 +31,41 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   // Show loading spinner while auth is initializing
   if (!initialized) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 size={32} className="animate-spin text-primary-500 mx-auto mb-4" />
-          <p className="text-foreground-muted">Initializing application...</p>
-        </div>
-      </div>
+      <Loader 
+        fullScreen 
+        size="lg" 
+        message="Initializing application..." 
+      />
     );
   }
 
   // Show loading spinner while auth state is loading
   if (loading) {
     return (
+      <Loader 
+        fullScreen 
+        size="lg" 
+        message="Loading your profile..." 
+      />
+    );
+  }
+
+  // Show error state if there's an authentication error
+  if (error) {
+    return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 size={32} className="animate-spin text-primary-500 mx-auto mb-4" />
-          <p className="text-foreground-muted">Loading your profile...</p>
+        <div className="text-center p-8 max-w-md">
+          <div className="bg-error-900/20 p-4 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+            <AlertCircle size={32} className="text-error-500" />
+          </div>
+          <h2 className="text-xl font-bold mb-2">Authentication Error</h2>
+          <p className="text-foreground-muted mb-4">{error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );

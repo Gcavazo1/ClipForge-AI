@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, RefreshCw, Home, Bug } from 'lucide-react';
 import Button from '../ui/button';
+import Loader from '../ui/loader';
 import { errorReporter } from '../../lib/error-handling/error-reporter';
 
 interface ErrorFallbackProps {
@@ -15,6 +16,7 @@ const ErrorFallback: React.FC<ErrorFallbackProps> = ({
   componentName = 'Component' 
 }) => {
   const [reportId, setReportId] = React.useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = React.useState(false);
 
   React.useEffect(() => {
     if (error) {
@@ -27,7 +29,11 @@ const ErrorFallback: React.FC<ErrorFallbackProps> = ({
   }, [error, componentName]);
 
   const handleRetry = () => {
-    resetError?.();
+    setIsRetrying(true);
+    setTimeout(() => {
+      resetError?.();
+      setIsRetrying(false);
+    }, 1000);
   };
 
   const handleReportBug = () => {
@@ -45,6 +51,10 @@ Please describe what you were doing when this error occurred:
     
     window.open(`mailto:support@clipforge.ai?subject=${subject}&body=${body}`);
   };
+
+  if (isRetrying) {
+    return <Loader message="Retrying..." />;
+  }
 
   return (
     <div className="flex items-center justify-center min-h-[300px] p-6">

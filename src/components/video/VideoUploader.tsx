@@ -3,6 +3,7 @@ import { useDropzone } from 'react-dropzone';
 import { Upload, Film, AlertCircle, Check, Clock, Zap, Wifi, WifiOff, Loader2 } from 'lucide-react';
 import Button from '../ui/button';
 import Progress from '../ui/progress';
+import Loader from '../ui/loader';
 import { VideoProject } from '../../types';
 import { generateId } from '../../lib/utils';
 import { VideoProjectService } from '../../lib/database';
