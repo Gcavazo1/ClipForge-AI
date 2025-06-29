@@ -5,7 +5,6 @@ import App from './App';
 import { ToastProvider } from './components/ui/toast';
 import { performanceMonitor } from './lib/performance/performance-monitor';
 import './index.css';
-import './styles/magicMouse.css';
 
 // Start performance monitoring
 performanceMonitor.startTimer('app-initialization');
