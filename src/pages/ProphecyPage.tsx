@@ -12,6 +12,7 @@ import {
   LineChart
 } from 'lucide-react';
 import Button from '../components/ui/button';
+import MagicText from '../components/ui/magic-text';
 import FeedbackPanel from '../components/prophecy/FeedbackPanel';
 import { useAppStore } from '../store';
 import { supabase } from '../lib/supabase';
@@ -116,7 +117,13 @@ const ProphecyPage: React.FC = () => {
     <div className="max-w-6xl mx-auto py-8 px-4">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold">Prophetic Insights</h1>
+          <MagicText 
+            as="h1" 
+            className="text-2xl font-bold"
+            starCount={3}
+          >
+            Prophetic Insights
+          </MagicText>
           <p className="text-foreground-muted">Divine predictions for your content</p>
         </div>
         <Button
@@ -133,7 +140,13 @@ const ProphecyPage: React.FC = () => {
           {/* Predictions Panel */}
           <div className="bg-background-light rounded-lg p-6 space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-medium">Performance Prophecy</h2>
+              <MagicText 
+                as="h2" 
+                className="text-lg font-medium"
+                starCount={2}
+              >
+                Performance Prophecy
+              </MagicText>
               <div className="text-xs text-foreground-muted">
                 {prophecy.confidence}% confidence
               </div>
@@ -171,7 +184,13 @@ const ProphecyPage: React.FC = () => {
 
           {/* Timing Panel */}
           <div className="bg-background-light rounded-lg p-6 space-y-6">
-            <h2 className="text-lg font-medium">Optimal Timing</h2>
+            <MagicText 
+              as="h2" 
+              className="text-lg font-medium"
+              starCount={2}
+            >
+              Optimal Timing
+            </MagicText>
 
             <div className="space-y-4">
               <div className="flex items-center">
@@ -216,7 +235,13 @@ const ProphecyPage: React.FC = () => {
       {feedbackSummary && feedbackSummary.accuracyTrend.length > 0 && (
         <div className="mt-8 bg-background-light rounded-lg p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-medium">Prediction Accuracy Trend</h2>
+            <MagicText 
+              as="h2" 
+              className="text-lg font-medium"
+              starCount={2}
+            >
+              Prediction Accuracy Trend
+            </MagicText>
             <div className="flex items-center text-sm text-foreground-muted">
               <LineChart size={16} className="mr-2" />
               Based on {feedbackSummary.totalFeedback} predictions

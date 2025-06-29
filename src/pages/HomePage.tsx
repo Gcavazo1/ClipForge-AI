@@ -4,6 +4,7 @@ import { Scissors, Video, Wand2, Upload, Zap, ArrowRight, CheckCircle2 } from 'l
 import { motion } from 'framer-motion';
 import VideoUploader from '../components/video/VideoUploader';
 import Button from '../components/ui/button';
+import MagicText from '../components/ui/magic-text';
 import { useAppStore } from '../store';
 import { VideoProject } from '../types';
 
@@ -66,9 +67,15 @@ const HomePage: React.FC = () => {
           <div className="inline-block bg-primary-900/30 p-2 rounded-lg mb-6">
             <Scissors size={28} className="text-primary-400" />
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold mb-6 bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent">
+          
+          <MagicText 
+            as="h1" 
+            className="text-4xl md:text-5xl font-bold mb-6"
+            starCount={4}
+          >
             Turn Long Videos Into Engaging Clips with AI
-          </h1>
+          </MagicText>
+          
           <p className="text-lg text-foreground-muted mb-8 max-w-2xl mx-auto">
             ClipForge AI automatically finds the most engaging moments in your videos,
             creates perfect captions, and helps you share them on social media.
@@ -110,14 +117,20 @@ const HomePage: React.FC = () => {
       {/* Features Section */}
       <section className="py-12 md:py-20 bg-background-light clip-path-slant">
         <div className="max-w-6xl mx-auto px-4">
-          <motion.h2 
-            className="text-2xl md:text-3xl font-bold text-center mb-12"
+          <motion.div
+            className="text-center mb-12"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5, delay: 0.3 }}
           >
-            How ClipForge AI Works
-          </motion.h2>
+            <MagicText 
+              as="h2" 
+              className="text-2xl md:text-3xl font-bold"
+              starCount={3}
+            >
+              How ClipForge AI Works
+            </MagicText>
+          </motion.div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {featureItems.map((item, i) => (
@@ -150,9 +163,14 @@ const HomePage: React.FC = () => {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
             >
-              <h2 className="text-2xl md:text-3xl font-bold mb-6">
-                Find the <span className="text-primary-500">Perfect Moments</span> in Your Content
-              </h2>
+              <MagicText 
+                as="h2" 
+                className="text-2xl md:text-3xl font-bold mb-6"
+                starCount={2}
+              >
+                Find the Perfect Moments in Your Content
+              </MagicText>
+              
               <div className="space-y-4 mb-8">
                 <div className="flex items-start gap-3">
                   <CheckCircle2 size={20} className="text-primary-500 mt-0.5 shrink-0" />
@@ -197,9 +215,14 @@ const HomePage: React.FC = () => {
       {/* CTA Section */}
       <section className="py-16 bg-primary-900/20 rounded-lg mx-4 mb-12">
         <div className="max-w-4xl mx-auto text-center px-4">
-          <h2 className="text-2xl md:text-3xl font-bold mb-6">
+          <MagicText 
+            as="h2" 
+            className="text-2xl md:text-3xl font-bold mb-6"
+            starCount={3}
+          >
             Ready to Create Engaging Video Clips?
-          </h2>
+          </MagicText>
+          
           <p className="text-lg text-foreground-muted mb-8 max-w-2xl mx-auto">
             Upload your first video and see how ClipForge AI can transform your content strategy.
           </p>
