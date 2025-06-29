@@ -29,7 +29,7 @@ export class GroqProvider implements AIProvider {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'mixtral-8x7b-32768', // Fast and capable model
+          model: 'llama3-8b-8192', // Fast and capable model
           messages: [
             {
               role: 'system',
