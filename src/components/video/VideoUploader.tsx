@@ -5,8 +5,10 @@ import Button from '../ui/button';
 import Progress from '../ui/progress';
 import { VideoProject } from '../../types';
 import { generateId } from '../../lib/utils';
-import { transcribeAndHighlight } from '../../lib/transcribeAndHighlight';
+import { StorageService } from '../../lib/storage';
+import { VideoProjectService } from '../../lib/database';
 import { useAppStore } from '../../store';
+import { logger } from '../../lib/logger';
 
 interface VideoUploaderProps {
   onUploadComplete: (project: VideoProject) => void;
@@ -17,119 +19,138 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
   const [fileName, setFileName] = useState<string | null>(null);
   const [fileSize, setFileSize] = useState<number | null>(null);
   
+  const user = useAppStore((state) => state.user);
   const setUploadState = useAppStore((state) => state.setUploadState);
   const setTranscribeState = useAppStore((state) => state.setTranscribeState);
-  const setTranscript = useAppStore((state) => state.setTranscript);
   const isUploading = useAppStore((state) => state.isUploading);
   const uploadProgress = useAppStore((state) => state.uploadProgress);
   const isTranscribing = useAppStore((state) => state.isTranscribing);
   const transcribeProgress = useAppStore((state) => state.transcribeProgress);
   
   const handleUpload = useCallback(async (file: File) => {
+    if (!user) {
+      setError('Please sign in to upload videos');
+      return;
+    }
+
     setError(null);
     setFileName(file.name);
     setFileSize(file.size);
     
-    // Validate file type
-    const validTypes = ['video/mp4', 'video/quicktime', 'video/mov'];
-    if (!validTypes.includes(file.type)) {
-      setError('Invalid file type. Please upload an MP4 or MOV file.');
+    // Validate file
+    const validation = StorageService.validateFile(file, 'video');
+    if (!validation.valid) {
+      setError(validation.error || 'Invalid file');
       return;
     }
     
-    // Validate file size (500MB limit)
-    const maxSize = 500 * 1024 * 1024;
-    if (file.size > maxSize) {
-      setError('File is too large. Maximum size is 500MB.');
-      return;
-    }
-    
-    // Start upload
-    setUploadState(true, 0);
-    
-    // Simulate upload progress
-    const uploadInterval = setInterval(() => {
-      setUploadState(true, (prev) => {
-        const newProgress = prev + Math.random() * 10;
-        if (newProgress >= 100) {
-          clearInterval(uploadInterval);
-          return 100;
-        }
-        return newProgress;
-      });
-    }, 300);
-    
-    // Create object URL for local playback
-    const videoUrl = URL.createObjectURL(file);
-    
-    // Create a new project
-    const newProject: VideoProject = {
-      id: generateId(),
-      title: file.name.replace(/\.[^/.]+$/, ''),
-      videoUrl,
-      thumbnailUrl: 'https://images.pexels.com/photos/2873486/pexels-photo-2873486.jpeg',
-      duration: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      status: 'processing',
-    };
-    
-    // Simulate upload completion
-    setTimeout(async () => {
-      clearInterval(uploadInterval);
-      setUploadState(true, 100);
+    try {
+      // Start upload
+      setUploadState(true, 0);
+      logger.info('Starting video upload', { fileName: file.name, size: file.size });
       
-      // Load video to get duration
-      const video = document.createElement('video');
-      video.src = videoUrl;
-      
-      video.onloadedmetadata = async () => {
-        newProject.duration = video.duration;
-        
-        // Start transcription
-        setTranscribeState(true, 0);
-        
-        try {
-          // Simulate transcription progress
-          const transcribeInterval = setInterval(() => {
-            setTranscribeState(true, (prev) => {
-              const newProgress = prev + Math.random() * 5;
-              if (newProgress >= 100) {
-                clearInterval(transcribeInterval);
-                return 100;
-              }
-              return newProgress;
-            });
-          }, 200);
-          
-          // Get transcript using the correct function
-          const { transcript } = await transcribeAndHighlight(file);
-          setTranscript(transcript);
-          
-          clearInterval(transcribeInterval);
-          setTranscribeState(false, 100);
-          
-          // Complete project creation
-          newProject.status = 'ready';
-          onUploadComplete(newProject);
-          
-          // Reset states
-          setUploadState(false);
-          setTranscribeState(false);
-        } catch (error) {
-          setError('Error processing video. Please try again.');
-          setUploadState(false);
-          setTranscribeState(false);
-        }
+      // Create project record first
+      const projectId = generateId();
+      const newProject: VideoProject = {
+        id: projectId,
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        videoUrl: '',
+        thumbnailUrl: '',
+        duration: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        status: 'uploading',
+        progress: 0,
+        size: file.size,
       };
+
+      // Create project in database
+      const createdProject = await VideoProjectService.create(newProject);
       
-      video.onerror = () => {
-        setError('Error processing video. Please try again.');
+      // Upload video file
+      const uploadResult = await StorageService.uploadVideo(
+        file, 
+        user.id, 
+        (progress) => setUploadState(true, progress)
+      );
+      
+      // Generate and upload thumbnail
+      let thumbnailUrl = '';
+      try {
+        const thumbnailFile = await StorageService.generateThumbnail(file, 1);
+        const thumbnailResult = await StorageService.uploadThumbnail(thumbnailFile, user.id);
+        thumbnailUrl = thumbnailResult.publicUrl || thumbnailResult.url;
+      } catch (thumbnailError) {
+        logger.warn('Thumbnail generation failed', thumbnailError as Error);
+        // Continue without thumbnail
+      }
+      
+      // Get video duration
+      const duration = await getVideoDuration(file);
+      
+      // Update project with file details
+      const updatedProject = await VideoProjectService.update(createdProject.id, {
+        ...createdProject,
+        videoUrl: uploadResult.url,
+        thumbnailUrl,
+        duration,
+        status: 'processing',
+        progress: 100
+      });
+      
+      setUploadState(false);
+      
+      // Start transcription process
+      setTranscribeState(true, 0);
+      
+      // Update project status to transcribing
+      await VideoProjectService.updateStatus(updatedProject.id, 'transcribing', 0);
+      
+      // Simulate transcription progress (replace with real implementation)
+      const transcribeInterval = setInterval(() => {
+        setTranscribeState(true, (prev) => {
+          const newProgress = prev + Math.random() * 10;
+          if (newProgress >= 100) {
+            clearInterval(transcribeInterval);
+            return 100;
+          }
+          return newProgress;
+        });
+      }, 500);
+      
+      // Complete transcription (mock)
+      setTimeout(async () => {
+        clearInterval(transcribeInterval);
+        setTranscribeState(false, 100);
+        
+        // Update project status to ready
+        const finalProject = await VideoProjectService.updateStatus(
+          updatedProject.id, 
+          'ready', 
+          100
+        );
+        
+        // Reset states
         setUploadState(false);
         setTranscribeState(false);
-      };
-    }, 3000);
-  }, [onUploadComplete, setTranscript, setTranscribeState, setUploadState]);
+        
+        // Call completion callback
+        onUploadComplete({
+          ...updatedProject,
+          status: 'ready',
+          progress: 100
+        });
+        
+        logger.info('Video upload and processing completed', { projectId: updatedProject.id });
+      }, 3000);
+      
+    } catch (uploadError) {
+      logger.error('Video upload failed', uploadError as Error);
+      setError('Upload failed. Please try again.');
+      setUploadState(false);
+      setTranscribeState(false);
+    }
+  }, [user, onUploadComplete, setUploadState, setTranscribeState]);
   
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => {
@@ -142,14 +163,30 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
       'video/mp4': ['.mp4'],
       'video/quicktime': ['.mov'],
       'video/mov': ['.mov'],
+      'video/avi': ['.avi'],
+      'video/webm': ['.webm'],
     },
-    maxSize: 500 * 1024 * 1024,
+    maxSize: 500 * 1024 * 1024, // 500MB
   });
   
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return bytes + ' bytes';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+  
+  // Helper function to get video duration
+  const getVideoDuration = (file: File): Promise<number> => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      video.onloadedmetadata = () => {
+        resolve(video.duration);
+      };
+      video.onerror = () => {
+        reject(new Error('Failed to load video metadata'));
+      };
+      video.src = URL.createObjectURL(file);
+    });
   };
   
   if (isUploading || isTranscribing) {
@@ -169,7 +206,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
             <Check size={20} className="text-success-500 ml-2" />
           ) : (
             <span className="text-sm font-medium ml-2">
-              {isTranscribing ? transcribeProgress : uploadProgress}%
+              {isTranscribing ? transcribeProgress.toFixed(0) : uploadProgress.toFixed(0)}%
             </span>
           )}
         </div>
@@ -181,7 +218,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
         />
         
         <p className="text-sm text-foreground-muted mt-4 text-center">
-          {isTranscribing ? 'Transcribing video...' : 'Uploading video...'}
+          {isTranscribing ? 'Processing video and generating transcript...' : 'Uploading video...'}
         </p>
       </div>
     );
@@ -204,7 +241,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
         Select Video
       </Button>
       <p className="text-xs text-foreground-muted mt-4">
-        Supported formats: MP4, MOV (max 500MB)
+        Supported formats: MP4, MOV, AVI, WebM (max 500MB)
       </p>
       
       {error && (

@@ -1,11 +1,14 @@
 import { create } from 'zustand';
 import { VideoProject, ClipSegment, TranscriptSegment, ExportOptions, User } from '../types';
+import { VideoProjectService, ClipSegmentService, TranscriptSegmentService, UserProfileService } from '../lib/database';
+import { logger } from '../lib/logger';
 
 interface AppState {
   // User state
   isAuthenticated: boolean;
   user: User | null;
   setUser: (user: User | null) => void;
+  loadUserProfile: () => Promise<void>;
   
   // Project data
   projects: VideoProject[];
@@ -37,18 +40,24 @@ interface AppState {
   addProject: (project: VideoProject) => void;
   updateProject: (id: string, updates: Partial<VideoProject>) => void;
   removeProject: (id: string) => void;
+  loadProjects: () => Promise<void>;
   
   // Clip management
   addClipSegment: (segment: ClipSegment) => void;
   updateClipSegment: (id: string, updates: Partial<ClipSegment>) => void;
   removeClipSegment: (id: string) => void;
+  loadClipSegments: (projectId: string) => Promise<void>;
+  
+  // Transcript management
+  loadTranscript: (projectId: string) => Promise<void>;
+  saveTranscript: (projectId: string, segments: TranscriptSegment[]) => Promise<void>;
   
   // Export settings
   updateExportOptions: (options: Partial<ExportOptions>) => void;
   
   // Upload and transcribe methods
-  setUploadState: (isUploading: boolean, progress?: number) => void;
-  setTranscribeState: (isTranscribing: boolean, progress?: number) => void;
+  setUploadState: (isUploading: boolean, progress?: number | ((prev: number) => number)) => void;
+  setTranscribeState: (isTranscribing: boolean, progress?: number | ((prev: number) => number)) => void;
 }
 
 // Default export options
@@ -69,7 +78,7 @@ const defaultExportOptions: ExportOptions = {
   },
 };
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
   isAuthenticated: false,
   user: null,
@@ -94,6 +103,20 @@ export const useAppStore = create<AppState>((set) => ({
     isAuthenticated: !!user
   }),
   
+  loadUserProfile: async () => {
+    const { user } = get();
+    if (!user) return;
+    
+    try {
+      const profile = await UserProfileService.getProfile(user.id);
+      if (profile) {
+        set({ user: { ...user, ...profile } });
+      }
+    } catch (error) {
+      logger.error('Failed to load user profile', error as Error);
+    }
+  },
+  
   // Methods
   setCurrentProject: (project) => set({ currentProject: project }),
   setClipSegments: (segments) => set({ clipSegments: segments }),
@@ -104,7 +127,7 @@ export const useAppStore = create<AppState>((set) => ({
   
   // Project management
   addProject: (project) => set((state) => ({ 
-    projects: [...state.projects, project] 
+    projects: [project, ...state.projects] 
   })),
   
   updateProject: (id, updates) => set((state) => ({ 
@@ -116,26 +139,108 @@ export const useAppStore = create<AppState>((set) => ({
       : state.currentProject
   })),
   
-  removeProject: (id) => set((state) => ({ 
-    projects: state.projects.filter((project) => project.id !== id),
-    currentProject: state.currentProject?.id === id ? null : state.currentProject
-  })),
+  removeProject: async (id) => {
+    try {
+      await VideoProjectService.delete(id);
+      set((state) => ({ 
+        projects: state.projects.filter((project) => project.id !== id),
+        currentProject: state.currentProject?.id === id ? null : state.currentProject
+      }));
+    } catch (error) {
+      logger.error('Failed to remove project', error as Error, { id });
+      throw error;
+    }
+  },
+  
+  loadProjects: async () => {
+    const { user } = get();
+    if (!user) return;
+    
+    try {
+      const projects = await VideoProjectService.getByUserId(user.id);
+      set({ projects });
+    } catch (error) {
+      logger.error('Failed to load projects', error as Error);
+    }
+  },
   
   // Clip management
-  addClipSegment: (segment) => set((state) => ({ 
-    clipSegments: [...state.clipSegments, segment] 
-  })),
+  addClipSegment: async (segment) => {
+    try {
+      const createdSegment = await ClipSegmentService.create(segment);
+      set((state) => ({ 
+        clipSegments: [...state.clipSegments, createdSegment] 
+      }));
+    } catch (error) {
+      logger.error('Failed to add clip segment', error as Error);
+      throw error;
+    }
+  },
   
-  updateClipSegment: (id, updates) => set((state) => ({ 
-    clipSegments: state.clipSegments.map((segment) => 
-      segment.id === id ? { ...segment, ...updates } : segment
-    ) 
-  })),
+  updateClipSegment: async (id, updates) => {
+    try {
+      const updatedSegment = await ClipSegmentService.update(id, updates);
+      set((state) => ({ 
+        clipSegments: state.clipSegments.map((segment) => 
+          segment.id === id ? updatedSegment : segment
+        ) 
+      }));
+    } catch (error) {
+      logger.error('Failed to update clip segment', error as Error, { id });
+      throw error;
+    }
+  },
   
-  removeClipSegment: (id) => set((state) => ({ 
-    clipSegments: state.clipSegments.filter((segment) => segment.id !== id),
-    selectedClipId: state.selectedClipId === id ? null : state.selectedClipId
-  })),
+  removeClipSegment: async (id) => {
+    try {
+      await ClipSegmentService.delete(id);
+      set((state) => ({ 
+        clipSegments: state.clipSegments.filter((segment) => segment.id !== id),
+        selectedClipId: state.selectedClipId === id ? null : state.selectedClipId
+      }));
+    } catch (error) {
+      logger.error('Failed to remove clip segment', error as Error, { id });
+      throw error;
+    }
+  },
+  
+  loadClipSegments: async (projectId) => {
+    try {
+      const segments = await ClipSegmentService.getByProjectId(projectId);
+      set({ clipSegments: segments });
+    } catch (error) {
+      logger.error('Failed to load clip segments', error as Error, { projectId });
+    }
+  },
+  
+  // Transcript management
+  loadTranscript: async (projectId) => {
+    try {
+      const segments = await TranscriptSegmentService.getByProjectId(projectId);
+      set({ transcript: segments });
+    } catch (error) {
+      logger.error('Failed to load transcript', error as Error, { projectId });
+    }
+  },
+  
+  saveTranscript: async (projectId, segments) => {
+    try {
+      // Delete existing segments
+      await TranscriptSegmentService.deleteByProjectId(projectId);
+      
+      // Create new segments
+      const segmentsWithProjectId = segments.map(segment => ({
+        ...segment,
+        projectId
+      }));
+      
+      const createdSegments = await TranscriptSegmentService.createBatch(segmentsWithProjectId);
+      set({ transcript: createdSegments });
+    } catch (error) {
+      logger.error('Failed to save transcript', error as Error, { projectId });
+      throw error;
+    }
+  },
   
   // Export settings
   updateExportOptions: (options) => set((state) => ({ 
@@ -143,13 +248,15 @@ export const useAppStore = create<AppState>((set) => ({
   })),
   
   // Upload and transcribe methods
-  setUploadState: (isUploading, progress = 0) => set({ 
+  setUploadState: (isUploading, progress = 0) => set((state) => ({ 
     isUploading, 
-    uploadProgress: isUploading ? progress : 0 
-  }),
+    uploadProgress: isUploading ? 
+      (typeof progress === 'function' ? progress(state.uploadProgress) : progress) : 0 
+  })),
   
-  setTranscribeState: (isTranscribing, progress = 0) => set({ 
+  setTranscribeState: (isTranscribing, progress = 0) => set((state) => ({ 
     isTranscribing, 
-    transcribeProgress: isTranscribing ? progress : 0 
-  }),
+    transcribeProgress: isTranscribing ? 
+      (typeof progress === 'function' ? progress(state.transcribeProgress) : progress) : 0 
+  })),
 }));

@@ -37,7 +37,7 @@ export interface VideoProject {
   duration: number;
   createdAt: string;
   updatedAt: string;
-  status: 'uploading' | 'processing' | 'ready' | 'error';
+  status: 'uploading' | 'processing' | 'transcribing' | 'analyzing' | 'ready' | 'error' | 'archived';
   progress?: number;
   error?: string;
   size?: number;
@@ -52,15 +52,17 @@ export interface ClipSegment {
   isHighlight: boolean;
   confidence: number;
   summary?: string;
-  type?: 'emotion' | 'insight' | 'hook' | 'cta';
+  type?: 'highlight' | 'manual' | 'auto_detected' | 'user_created' | 'ai_suggested';
 }
 
 export interface TranscriptSegment {
   id: string;
+  projectId?: string;
   startTime: number;
   endTime: number;
   text: string;
   speakerId?: string;
+  confidence?: number;
 }
 
 export interface CaptionStyle {
@@ -97,6 +99,7 @@ export interface ClipAnalytics {
   watchTime: number;
   postedAt: string;
   updatedAt: string;
+  viewsOverTime?: Array<{ date: string; views: number }>;
 }
 
 export interface ProphecyRequest {
@@ -140,6 +143,9 @@ export interface UserFeedback {
     actualViews?: number;
     actualLikes?: number;
     actualComments?: number;
+    predictedViews?: number;
+    predictedLikes?: number;
+    predictedComments?: number;
   };
 }
 
@@ -152,4 +158,72 @@ export interface FeedbackSummary {
     date: string;
     accuracy: number;
   }[];
+}
+
+// Database-specific types
+export interface DatabaseVideoProject {
+  id: string;
+  user_id: string;
+  title: string;
+  description?: string;
+  video_url: string;
+  thumbnail_url?: string;
+  original_filename?: string;
+  duration: number;
+  file_size: number;
+  mime_type?: string;
+  status: VideoProject['status'];
+  progress: number;
+  error_message?: string;
+  metadata: any;
+  processing_started_at?: string;
+  processing_completed_at?: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+}
+
+export interface DatabaseClipSegment {
+  id: string;
+  project_id: string;
+  title?: string;
+  start_time: number;
+  end_time: number;
+  is_highlight: boolean;
+  confidence?: number;
+  segment_type: ClipSegment['type'];
+  summary?: string;
+  metadata: any;
+  export_count: number;
+  last_exported_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DatabaseTranscriptSegment {
+  id: string;
+  project_id: string;
+  start_time: number;
+  end_time: number;
+  text: string;
+  speaker_id?: string;
+  speaker_name?: string;
+  confidence?: number;
+  language: string;
+  word_count?: number;
+  created_at: string;
+}
+
+export interface DatabaseUserProfile {
+  id: string;
+  display_name?: string;
+  avatar_url?: string;
+  plan_type: User['plan'];
+  usage_stats: any;
+  preferences: any;
+  onboarding_completed: boolean;
+  last_active_at: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
 }
