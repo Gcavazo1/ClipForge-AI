@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Video, Search, SortDesc } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Button from '../components/ui/button';
-import MagicText from '../components/ui/magic-text';
 import ProjectCard from '../components/dashboard/ProjectCard';
 import { useAppStore } from '../store';
 import { mockProjects } from '../lib/mockData';
@@ -37,9 +36,7 @@ const DashboardPage: React.FC = () => {
     <div className="max-w-6xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-2xl font-bold">
-            Your <MagicText>Creative Projects</MagicText>
-          </h1>
+          <h1 className="text-2xl font-bold">Your Projects</h1>
           <p className="text-foreground-muted">Manage your video projects and clips</p>
         </div>
         
@@ -95,11 +92,9 @@ const DashboardPage: React.FC = () => {
       ) : (
         <div className="text-center py-16">
           <Video size={48} className="mx-auto mb-4 text-foreground-muted" />
-          <h2 className="text-xl font-semibold mb-2">
-            No <MagicText>projects</MagicText> yet
-          </h2>
+          <h2 className="text-xl font-semibold mb-2">No projects yet</h2>
           <p className="text-foreground-muted mb-6">
-            Upload your first video to get started with AI-powered clip creation
+            Upload your first video to get started
           </p>
           <Button
             variant="primary"
