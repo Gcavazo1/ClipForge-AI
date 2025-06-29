@@ -7,6 +7,9 @@ import { withLazyLoading, preloadComponent } from './lib/performance/lazy-loadin
 import { useAuth } from './hooks/useAuth';
 import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import MagicMouse from './components/common/MagicMouse';
+import CustomCursor from './components/common/CustomCursor';
+import './styles/magicMouse.css';
 
 // Lazy load pages for better performance
 const HomePage = withLazyLoading(() => import('./pages/HomePage'), 'Loading home page...');
@@ -56,61 +59,65 @@ function AppContent() {
   useAuth();
 
   return (
-    <Routes>
-      {/* Public routes */}
-      <Route path="/" element={<Layout />}>
-        <Route index element={<HomePage />} />
-        <Route path="pricing" element={<PricingPage />} />
-      </Route>
+    <>
+      <MagicMouse />
+      <CustomCursor />
+      <Routes>
+        {/* Public routes */}
+        <Route path="/" element={<Layout />}>
+          <Route index element={<HomePage />} />
+          <Route path="pricing" element={<PricingPage />} />
+        </Route>
 
-      {/* Auth routes (redirect if already authenticated) */}
-      <Route path="/signin" element={<SignInPage />} />
-      <Route path="/signup" element={<SignUpPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
+        {/* Auth routes (redirect if already authenticated) */}
+        <Route path="/signin" element={<SignInPage />} />
+        <Route path="/signup" element={<SignUpPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-      {/* Protected routes */}
-      <Route path="/" element={<Layout />}>
-        <Route path="dashboard" element={
-          <ProtectedRoute>
-            <DashboardPage />
-          </ProtectedRoute>
-        } />
-        <Route path="editor/:projectId?" element={
-          <ProtectedRoute>
-            <EditorPage />
-          </ProtectedRoute>
-        } />
-        <Route path="analytics" element={
-          <ProtectedRoute>
-            <AnalyticsPage />
-          </ProtectedRoute>
-        } />
-        <Route path="prophecy" element={
-          <ProtectedRoute>
-            <ProphecyPage />
-          </ProtectedRoute>
-        } />
-        <Route path="settings" element={
-          <ProtectedRoute>
-            <SettingsPage />
-          </ProtectedRoute>
-        } />
-        <Route path="checkout/success" element={
-          <ProtectedRoute>
-            <CheckoutSuccessPage />
-          </ProtectedRoute>
-        } />
-        <Route path="checkout/cancel" element={
-          <ProtectedRoute>
-            <CheckoutCancelPage />
-          </ProtectedRoute>
-        } />
-      </Route>
+        {/* Protected routes */}
+        <Route path="/" element={<Layout />}>
+          <Route path="dashboard" element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          } />
+          <Route path="editor/:projectId?" element={
+            <ProtectedRoute>
+              <EditorPage />
+            </ProtectedRoute>
+          } />
+          <Route path="analytics" element={
+            <ProtectedRoute>
+              <AnalyticsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="prophecy" element={
+            <ProtectedRoute>
+              <ProphecyPage />
+            </ProtectedRoute>
+          } />
+          <Route path="settings" element={
+            <ProtectedRoute>
+              <SettingsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="checkout/success" element={
+            <ProtectedRoute>
+              <CheckoutSuccessPage />
+            </ProtectedRoute>
+          } />
+          <Route path="checkout/cancel" element={
+            <ProtectedRoute>
+              <CheckoutCancelPage />
+            </ProtectedRoute>
+          } />
+        </Route>
 
-      {/* Catch all routes */}
-      <Route path="/404" element={<NotFoundPage />} />
-      <Route path="*" element={<Navigate to="/404" replace />} />
-    </Routes>
+        {/* Catch all routes */}
+        <Route path="/404" element={<NotFoundPage />} />
+        <Route path="*" element={<Navigate to="/404" replace />} />
+      </Routes>
+    </>
   );
 }
 
