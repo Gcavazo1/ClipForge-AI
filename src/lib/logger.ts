@@ -7,7 +7,7 @@ interface LogEntry {
   message: string;
   context?: Record<string, any>;
   timestamp: string;
-  userId?: string;
+  user_id?: string;
 }
 
 class Logger {
@@ -45,7 +45,7 @@ class Logger {
       message,
       context,
       timestamp: new Date().toISOString(),
-      userId,
+      user_id: userId,
     };
   }
 
