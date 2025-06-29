@@ -11,12 +11,14 @@ import {
   AlertCircle,
   LineChart,
   BarChart4,
-  Layers
+  Layers,
+  Zap
 } from 'lucide-react';
 import Button from '../components/ui/button';
 import ProphecyPanel from '../components/prophecy/ProphecyPanel';
 import FeedbackPanel from '../components/prophecy/FeedbackPanel';
 import ClipPlanForm from '../components/prophecy/ClipPlanForm';
+import ModelTrainingPanel from '../components/prophecy/ModelTrainingPanel';
 import { useAppStore } from '../store';
 import { supabase } from '../lib/supabase';
 import { getProphecy, generateProphecyWithAllModels, getAvailableModelTypes } from '../lib/prophecy';
@@ -25,6 +27,8 @@ import { formatNumber } from '../lib/utils';
 import { Toast, ToastTitle, ToastDescription } from '../components/ui/toast';
 import { FeedbackSummary, ProphecyResult, ModelType } from '../types';
 import ProphecyVisualizer from '../lib/ml/ProphecyVisualizer';
+import { modelTrainingService } from '../lib/ml/ModelTrainingService';
+import { dataIntegrationPipeline } from '../lib/ml/DataIntegrationPipeline';
 
 const ProphecyPage: React.FC = () => {
   const [prophecy, setProphecy] = useState<ProphecyResult | null>(null);
@@ -38,24 +42,70 @@ const ProphecyPage: React.FC = () => {
   const [selectedModel, setSelectedModel] = useState<ModelType>('ensemble');
   const [availableModels, setAvailableModels] = useState<ModelType[]>([]);
   const [showComparison, setShowComparison] = useState(false);
+  const [showTrainingPanel, setShowTrainingPanel] = useState(false);
+  const [dataSources, setDataSources] = useState<string[]>([]);
 
   const user = useAppStore((state) => state.user);
   const currentProject = useAppStore((state) => state.currentProject);
 
   useEffect(() => {
-    if (user && currentProject) {
-      generateProphecy();
+    if (user) {
+      // Initialize with best model for user
+      initializeWithBestModel();
+      
+      // Get available data sources
+      fetchDataSources();
+      
+      // Load feedback summary
       loadFeedbackSummary();
+      
+      // Set available models
       setAvailableModels(getAvailableModelTypes());
     }
-  }, [user, currentProject]);
+  }, [user]);
 
-  const generateProphecy = async (modelType: ModelType = 'ensemble') => {
+  useEffect(() => {
+    if (user && currentProject) {
+      generateProphecy();
+    }
+  }, [user, currentProject, selectedModel]);
+
+  const initializeWithBestModel = async () => {
+    if (!user) return;
+    
+    try {
+      const bestModel = await modelTrainingService.getBestModelForUser(user.id);
+      setSelectedModel(bestModel);
+    } catch (error) {
+      console.error('Failed to get best model:', error);
+      // Default to ensemble if error
+      setSelectedModel('ensemble');
+    }
+  };
+
+  const fetchDataSources = async () => {
+    try {
+      const sources = await dataIntegrationPipeline.getAvailableDataSources();
+      setDataSources(sources);
+    } catch (error) {
+      console.error('Failed to fetch data sources:', error);
+    }
+  };
+
+  const generateProphecy = async (modelType: ModelType = selectedModel) => {
     if (!user || !currentProject) return;
 
     try {
       setIsLoading(true);
       setError(null);
+
+      // Check if we need to train models first
+      const trainingStatus = await modelTrainingService.getTrainingStatus(user.id);
+      
+      if (!trainingStatus.lastTrained) {
+        // First time - train models
+        await modelTrainingService.trainModelsForUser(user.id, true);
+      }
 
       const prophecyResult = await getProphecy(user.id, currentProject.id, modelType);
       setProphecy(prophecyResult);
@@ -121,7 +171,43 @@ const ProphecyPage: React.FC = () => {
     generateProphecy(modelType);
   };
 
-  if (isLoading) {
+  const handleTrainModels = async () => {
+    if (!user) return;
+    
+    try {
+      setIsLoading(true);
+      
+      const success = await modelTrainingService.trainModelsForUser(user.id, true);
+      
+      if (success) {
+        setToastMessage({
+          title: 'Models Trained Successfully',
+          description: 'Your prediction models have been updated with the latest data.'
+        });
+        
+        // Regenerate prophecy with newly trained models
+        await generateProphecy(selectedModel);
+      } else {
+        setToastMessage({
+          title: 'Training Skipped',
+          description: 'Not enough data available or training already in progress.'
+        });
+      }
+      
+      setShowToast(true);
+    } catch (error) {
+      console.error('Training failed:', error);
+      setToastMessage({
+        title: 'Training Failed',
+        description: 'There was an error training the models. Please try again.'
+      });
+      setShowToast(true);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading && !prophecy) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-var(--nav-height))]">
         <motion.div
@@ -156,6 +242,13 @@ const ProphecyPage: React.FC = () => {
         <div className="flex gap-2">
           <Button
             variant="outline"
+            onClick={() => setShowTrainingPanel(!showTrainingPanel)}
+            icon={<Zap size={16} />}
+          >
+            {showTrainingPanel ? 'Hide Training' : 'Model Training'}
+          </Button>
+          <Button
+            variant="outline"
             onClick={generateAllModelProphecies}
             disabled={isLoadingAllModels}
             icon={<Layers size={16} />}
@@ -171,6 +264,30 @@ const ProphecyPage: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* Data Sources Info */}
+      {dataSources.length > 0 && (
+        <div className="mb-6 bg-background-light rounded-lg p-4">
+          <div className="flex items-center text-sm">
+            <Database size={16} className="mr-2 text-primary-500" />
+            <span className="font-medium">Data Sources:</span>
+            <div className="ml-2 flex gap-2">
+              {dataSources.map(source => (
+                <span key={source} className="px-2 py-0.5 bg-background rounded-full text-xs">
+                  {source}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Model Training Panel */}
+      {showTrainingPanel && user && (
+        <div className="mb-8">
+          <ModelTrainingPanel userId={user.id} />
+        </div>
+      )}
 
       {showComparison && allModelProphecies && (
         <div className="mb-8 bg-background-light rounded-lg p-6">
@@ -302,6 +419,28 @@ const ProphecyPage: React.FC = () => {
         </Toast>
       )}
     </div>
+  );
+};
+
+// Database icon component
+const Database = (props: { size: number; className?: string }) => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={props.size}
+      height={props.size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={props.className}
+    >
+      <ellipse cx="12" cy="5" rx="9" ry="3" />
+      <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+      <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+    </svg>
   );
 };
 
