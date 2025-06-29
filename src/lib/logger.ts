@@ -17,6 +17,10 @@ class Logger {
   private readonly BUFFER_SIZE = 20;
   private flushTimeout: number | null = null;
   private isFlushPending = false;
+  private lastFlushAttempt = 0;
+  private flushFailCount = 0;
+  private readonly MAX_FLUSH_FAILURES = 3;
+  private readonly FLUSH_RETRY_DELAY = 10000; // 10 seconds
 
   private constructor() {
     window.addEventListener('unload', () => this.flushLogs());
@@ -74,19 +78,44 @@ class Logger {
 
   private async flushLogs() {
     if (this.logBuffer.length === 0) return;
+    
+    // Prevent too frequent flush attempts
+    const now = Date.now();
+    if (now - this.lastFlushAttempt < 1000 && this.flushFailCount > 0) {
+      return;
+    }
+    
+    this.lastFlushAttempt = now;
 
     try {
+      // Make a copy of the buffer and clear it immediately to prevent loss
+      const logsToFlush = [...this.logBuffer];
+      this.logBuffer = [];
+      
       const { error } = await supabase
         .from('application_logs')
-        .insert(this.logBuffer);
+        .insert(logsToFlush);
 
       if (error) {
         console.error('Failed to persist logs:', error);
+        
+        // Put logs back in buffer if there's an error
+        this.logBuffer = [...logsToFlush, ...this.logBuffer];
+        
+        this.flushFailCount++;
+        
+        // If we've failed too many times, log to console and clear buffer
+        if (this.flushFailCount >= this.MAX_FLUSH_FAILURES) {
+          console.warn(`Failed to persist logs ${this.flushFailCount} times, clearing buffer to prevent memory issues`);
+          this.logBuffer = [];
+          this.flushFailCount = 0;
+        }
       } else {
-        this.logBuffer = [];
+        this.flushFailCount = 0;
       }
     } catch (error) {
       console.error('Error flushing logs:', error);
+      this.flushFailCount++;
     }
   }
 
@@ -138,6 +167,22 @@ class Logger {
 
     const entry = await this.createLogEntry('debug', `Performance: ${label}`, perfContext);
     await this.persistLog(entry);
+  }
+  
+  // Force flush logs - useful for critical operations
+  async forceFlush() {
+    await this.flushLogs();
+  }
+  
+  // Clear log buffer - useful for testing or memory issues
+  clearBuffer() {
+    this.logBuffer = [];
+    this.flushFailCount = 0;
+    if (this.flushTimeout) {
+      clearTimeout(this.flushTimeout);
+      this.flushTimeout = null;
+      this.isFlushPending = false;
+    }
   }
 }
 

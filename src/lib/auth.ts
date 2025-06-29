@@ -51,6 +51,35 @@ export const updateProfileSchema = z.object({
   }),
 });
 
+// Error message mapping for user-friendly errors
+const AUTH_ERROR_MESSAGES = {
+  'User already registered': 'An account with this email already exists. Please sign in instead.',
+  'Invalid login credentials': 'Invalid email or password. Please check your credentials and try again.',
+  'Email not confirmed': 'Please check your email and click the confirmation link before signing in.',
+  'Password should be': 'Password does not meet requirements. Please use at least 8 characters with uppercase, lowercase, and numbers.',
+  'Invalid email': 'Please enter a valid email address.',
+  'Database error': 'There was a problem creating your account. Please try again in a moment.',
+  'rate limit': 'Too many attempts. Please wait a moment before trying again.',
+  'after': 'Too many attempts. Please wait a moment before trying again.',
+  'Too many requests': 'Too many sign-in attempts. Please wait a moment before trying again.',
+};
+
+// Get user-friendly error message
+function getUserFriendlyErrorMessage(error: Error): string {
+  const message = error.message;
+  
+  for (const [key, value] of Object.entries(AUTH_ERROR_MESSAGES)) {
+    if (message.includes(key)) {
+      return value;
+    }
+  }
+  
+  return message;
+}
+
+// Profile creation cache to prevent duplicate creation attempts
+const profileCreationCache = new Set<string>();
+
 // Enhanced auth functions with proper error handling
 export async function signUp(email: string, password: string, name: string) {
   try {
@@ -69,21 +98,7 @@ export async function signUp(email: string, password: string, name: string) {
 
     if (error) {
       logger.error('Sign up failed', error, { email });
-      
-      // Provide more user-friendly error messages
-      if (error.message.includes('User already registered')) {
-        throw new Error('An account with this email already exists. Please sign in instead.');
-      } else if (error.message.includes('Password should be')) {
-        throw new Error('Password does not meet requirements. Please use at least 8 characters with uppercase, lowercase, and numbers.');
-      } else if (error.message.includes('Invalid email')) {
-        throw new Error('Please enter a valid email address.');
-      } else if (error.message.includes('Database error')) {
-        throw new Error('There was a problem creating your account. Please try again in a moment.');
-      } else if (error.message.includes('rate limit') || error.message.includes('after') || error.message.includes('Too many')) {
-        throw new Error('Too many sign-up attempts. Please wait a moment before trying again.');
-      } else {
-        throw new Error(error.message);
-      }
+      throw new Error(getUserFriendlyErrorMessage(error));
     }
 
     if (!data.user) {
@@ -120,8 +135,7 @@ export async function signUp(email: string, password: string, name: string) {
         }
       } catch (profileCheckError) {
         logger.warn('Could not verify profile creation', profileCheckError as Error);
-        // Try to create profile anyway
-        await createUserProfileManually(data.user, name);
+        // Continue anyway, profile might be created later
       }
 
       logger.info('User registered and profile created', { userId: data.user.id });
@@ -141,15 +155,25 @@ export async function signUp(email: string, password: string, name: string) {
 // Manual profile creation fallback - exported for use in useAuth
 export async function createUserProfileManually(user: any, name: string) {
   try {
+    // Prevent duplicate creation attempts for the same user
+    const userId = user.id;
+    if (profileCreationCache.has(userId)) {
+      logger.info('Profile creation already in progress, skipping', { userId });
+      return;
+    }
+    
+    profileCreationCache.add(userId);
+    
     // First check if profile already exists to avoid conflicts
     const { data: existingProfile } = await supabase
       .from('user_profiles')
       .select('id')
-      .eq('id', user.id)
+      .eq('id', userId)
       .single();
       
     if (existingProfile) {
-      logger.info('Profile already exists, skipping creation', { userId: user.id });
+      logger.info('Profile already exists, skipping creation', { userId });
+      profileCreationCache.delete(userId);
       return;
     }
     
@@ -158,11 +182,11 @@ export async function createUserProfileManually(user: any, name: string) {
     let lastError = null;
     
     while (retries > 0) {
-      logger.info(`Attempting to create user profile (attempts left: ${retries})`, { userId: user.id });
+      logger.info(`Attempting to create user profile (attempts left: ${retries})`, { userId });
       const { error } = await supabase
         .from('user_profiles')
         .insert({
-          id: user.id,
+          id: userId,
           display_name: name,
           plan_type: 'free',
           usage_stats: {
@@ -184,9 +208,10 @@ export async function createUserProfileManually(user: any, name: string) {
           },
           onboarding_completed: false
         });
-
+        
       if (!error) {
-        logger.info('Manual profile creation successful', { userId: user.id });
+        logger.info('Profile created successfully', { userId });
+        profileCreationCache.delete(userId);
         return;
       }
       
@@ -200,8 +225,10 @@ export async function createUserProfileManually(user: any, name: string) {
     }
     
     logger.error('Manual profile creation failed after retries', lastError);
+    profileCreationCache.delete(userId);
     throw lastError;
   } catch (error) {
+    profileCreationCache.delete(user.id);
     logger.error('Manual profile creation error', error as Error);
     throw error;
   }
@@ -218,17 +245,7 @@ export async function signIn(email: string, password: string) {
 
     if (error) {
       logger.error('Sign in failed', error, { email });
-      
-      // Provide more user-friendly error messages
-      if (error.message.includes('Invalid login credentials')) {
-        throw new Error('Invalid email or password. Please check your credentials and try again.');
-      } else if (error.message.includes('Email not confirmed')) {
-        throw new Error('Please check your email and click the confirmation link before signing in.');
-      } else if (error.message.includes('Too many requests') || error.message.includes('rate limit')) {
-        throw new Error('Too many sign-in attempts. Please wait a moment before trying again.');
-      } else {
-        throw new Error(error.message);
-      }
+      throw new Error(getUserFriendlyErrorMessage(error));
     }
 
     if (!data.user || !data.session) {
@@ -273,12 +290,7 @@ export async function resetPassword(email: string) {
 
     if (error) {
       logger.error('Password reset failed', error, { email });
-      
-      if (error.message.includes('rate limit') || error.message.includes('after')) {
-        throw new Error('Too many password reset attempts. Please wait a moment before trying again.');
-      }
-      
-      throw new Error(error.message);
+      throw new Error(getUserFriendlyErrorMessage(error));
     }
 
     logger.info('Password reset email sent', { email });
@@ -397,9 +409,18 @@ export async function refreshSession() {
   }
 }
 
+// User profile cache to prevent redundant fetches
+const userProfileCache = new Map();
+
 // User profile management
 async function ensureUserProfile(user: any) {
   try {
+    // Check cache first
+    if (userProfileCache.has(user.id)) {
+      logger.debug('Using cached profile check result', { userId: user.id });
+      return;
+    }
+    
     logger.info('Ensuring user profile exists', { userId: user.id });
     const { data: profile, error } = await supabase
       .from('user_profiles')
@@ -419,6 +440,8 @@ async function ensureUserProfile(user: any) {
       throw error;
     } else {
       logger.info('User profile exists', { userId: user.id });
+      // Cache the result
+      userProfileCache.set(user.id, true);
     }
   } catch (error) {
     logger.error('Ensure user profile error', error as Error);
@@ -431,10 +454,16 @@ export function onAuthStateChange(callback: (event: string, session: any) => voi
   return supabase.auth.onAuthStateChange(callback);
 }
 
+// Get current user with profile - with caching
+const userCache = new Map();
+const pendingUserFetches = new Map();
+
 // Get current user with profile
 export async function getCurrentUser() {
   try {
     logger.debug('Getting current user');
+    
+    // Get the auth user first
     const { data: { user }, error } = await supabase.auth.getUser();
     
     if (error) {
@@ -446,30 +475,74 @@ export async function getCurrentUser() {
       logger.debug('No current user found');
       return null;
     }
-
-    // Get user profile
-    logger.debug('Getting user profile', { userId: user.id });
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError && profileError.code !== 'PGRST116') {
-      logger.error('Failed to get user profile', profileError);
+    
+    // Check if we have a cached user with profile
+    if (userCache.has(user.id)) {
+      logger.debug('Returning cached user with profile', { userId: user.id });
+      return userCache.get(user.id);
     }
+    
+    // Check if there's already a pending fetch for this user
+    if (pendingUserFetches.has(user.id)) {
+      logger.debug('Waiting for pending user fetch to complete', { userId: user.id });
+      return pendingUserFetches.get(user.id);
+    }
+    
+    // Create a promise for this fetch and store it
+    const fetchPromise = (async () => {
+      try {
+        // Get user profile
+        logger.debug('Getting user profile', { userId: user.id });
+        const { data: profile, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
 
-    logger.debug('Current user retrieved', { 
-      userId: user.id, 
-      hasProfile: !!profile 
-    });
+        if (profileError && profileError.code !== 'PGRST116') {
+          logger.error('Failed to get user profile', profileError);
+        }
 
-    return {
-      ...user,
-      profile: profile || null
-    };
+        const userWithProfile = {
+          ...user,
+          profile: profile || null
+        };
+        
+        // Cache the result
+        userCache.set(user.id, userWithProfile);
+        
+        logger.debug('Current user retrieved', { 
+          userId: user.id, 
+          hasProfile: !!profile 
+        });
+        
+        return userWithProfile;
+      } finally {
+        // Remove from pending fetches when done
+        pendingUserFetches.delete(user.id);
+      }
+    })();
+    
+    // Store the promise
+    pendingUserFetches.set(user.id, fetchPromise);
+    
+    return fetchPromise;
   } catch (error) {
     logger.error('Get current user error', error as Error);
     return null;
   }
+}
+
+// Clear user cache
+export function clearUserCache(userId?: string) {
+  if (userId) {
+    userCache.delete(userId);
+    userProfileCache.delete(userId);
+  } else {
+    userCache.clear();
+    userProfileCache.clear();
+    profileCreationCache.clear();
+  }
+  
+  logger.debug('User cache cleared', { userId: userId || 'all' });
 }
