@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, Scissors, LogOut, Settings, CreditCard, User, Loader2, AlertCircle } from 'lucide-react';
+import { Menu, X, Scissors, LogOut, Settings, CreditCard, Loader2, AlertCircle } from 'lucide-react';
 import Button from '../ui/button';
 import { useAuth } from '../../hooks/useAuth';
 import { signOut } from '../../lib/auth';
