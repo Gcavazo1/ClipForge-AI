@@ -8,6 +8,7 @@ import { Tooltip } from '../ui/tooltip';
 import { useQuery } from '@tanstack/react-query';
 import { getCurrentSubscription } from '../../lib/stripe';
 import { Toast, ToastTitle, ToastDescription } from '../ui/toast';
+import { logger } from '../../lib/logger';
 
 interface NavbarProps {
   isSidebarOpen: boolean;
@@ -34,17 +35,18 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
     enabled: !!user && initialized && !loading,
     retry: 1,
     onError: (err) => {
-      console.error('Failed to load subscription:', err);
+      logger.error('Failed to load subscription:', err as Error);
     }
   });
 
   const handleSignOut = async () => {
     try {
       setIsSigningOut(true);
+      logger.info('Signing out user', { userId: user?.id });
       await signOut();
       navigate('/');
     } catch (error) {
-      console.error('Sign out failed:', error);
+      logger.error('Sign out failed:', error as Error);
       setError('Failed to sign out. Please try again.');
       setShowToast(true);
     } finally {
@@ -64,6 +66,13 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
     if (!user) return 'U';
     return (user.name || user.user_metadata?.name || user.email || 'U').charAt(0).toUpperCase();
   };
+  
+  logger.debug('Navbar render state', { 
+    initialized, 
+    loading, 
+    hasUser: !!user, 
+    isLoadingSubscription 
+  });
   
   return (
     <header className="fixed top-0 left-0 right-0 h-[var(--nav-height)] bg-background z-40 border-b border-background-lighter">
@@ -91,11 +100,14 @@ const Navbar: React.FC<NavbarProps> = ({ isSidebarOpen, toggleSidebar }) => {
         
         <div className="flex items-center gap-3">
           {!initialized ? (
-            <div className="w-8 h-8 bg-background-lighter rounded-full animate-pulse" />
+            <div className="flex items-center">
+              <Loader2 size={20} className="animate-spin mr-2 text-primary-400" />
+              <span className="text-sm text-foreground-muted">Initializing...</span>
+            </div>
           ) : loading ? (
             <div className="flex items-center">
               <Loader2 size={20} className="animate-spin mr-2 text-primary-400" />
-              <span className="text-sm text-foreground-muted">Loading...</span>
+              <span className="text-sm text-foreground-muted">Loading profile...</span>
             </div>
           ) : user ? (
             <>

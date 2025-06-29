@@ -98,14 +98,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   transcribeProgress: 0,
   
   // User methods
-  setUser: (user) => set({ 
-    user,
-    isAuthenticated: !!user
-  }),
+  setUser: (user) => {
+    logger.debug('Setting user state', { 
+      userId: user?.id, 
+      isAuthenticated: !!user 
+    });
+    
+    set({ 
+      user,
+      isAuthenticated: !!user
+    });
+  },
   
   loadUserProfile: async () => {
     const { user } = get();
-    if (!user) return;
+    if (!user) {
+      logger.debug('No user to load profile for');
+      return;
+    }
     
     try {
       logger.info('Loading user profile', { userId: user.id });
@@ -181,21 +191,28 @@ export const useAppStore = create<AppState>((set, get) => ({
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   
   // Project management
-  addProject: (project) => set((state) => ({ 
-    projects: [project, ...state.projects] 
-  })),
+  addProject: (project) => {
+    logger.debug('Adding project to store', { projectId: project.id });
+    set((state) => ({ 
+      projects: [project, ...state.projects] 
+    }));
+  },
   
-  updateProject: (id, updates) => set((state) => ({ 
-    projects: state.projects.map((project) => 
-      project.id === id ? { ...project, ...updates } : project
-    ),
-    currentProject: state.currentProject?.id === id 
-      ? { ...state.currentProject, ...updates } 
-      : state.currentProject
-  })),
+  updateProject: (id, updates) => {
+    logger.debug('Updating project in store', { projectId: id });
+    set((state) => ({ 
+      projects: state.projects.map((project) => 
+        project.id === id ? { ...project, ...updates } : project
+      ),
+      currentProject: state.currentProject?.id === id 
+        ? { ...state.currentProject, ...updates } 
+        : state.currentProject
+    }));
+  },
   
   removeProject: async (id) => {
     try {
+      logger.info('Removing project', { projectId: id });
       await VideoProjectService.delete(id);
       set((state) => ({ 
         projects: state.projects.filter((project) => project.id !== id),
@@ -209,11 +226,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   loadProjects: async () => {
     const { user } = get();
-    if (!user) return;
+    if (!user) {
+      logger.debug('No user to load projects for');
+      return;
+    }
     
     try {
+      logger.info('Loading projects for user', { userId: user.id });
       const projects = await VideoProjectService.getByUserId(user.id);
       set({ projects });
+      logger.debug('Projects loaded successfully', { count: projects.length });
     } catch (error) {
       logger.error('Failed to load projects', error as Error);
     }
@@ -222,6 +244,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Clip management
   addClipSegment: async (segment) => {
     try {
+      logger.info('Adding clip segment', { projectId: segment.projectId });
       const createdSegment = await ClipSegmentService.create(segment);
       set((state) => ({ 
         clipSegments: [...state.clipSegments, createdSegment] 
@@ -234,6 +257,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   updateClipSegment: async (id, updates) => {
     try {
+      logger.info('Updating clip segment', { clipId: id });
       const updatedSegment = await ClipSegmentService.update(id, updates);
       set((state) => ({ 
         clipSegments: state.clipSegments.map((segment) => 
@@ -248,6 +272,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   removeClipSegment: async (id) => {
     try {
+      logger.info('Removing clip segment', { clipId: id });
       await ClipSegmentService.delete(id);
       set((state) => ({ 
         clipSegments: state.clipSegments.filter((segment) => segment.id !== id),
@@ -261,8 +286,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   loadClipSegments: async (projectId) => {
     try {
+      logger.info('Loading clip segments', { projectId });
       const segments = await ClipSegmentService.getByProjectId(projectId);
       set({ clipSegments: segments });
+      logger.debug('Clip segments loaded successfully', { count: segments.length });
     } catch (error) {
       logger.error('Failed to load clip segments', error as Error, { projectId });
     }
@@ -271,8 +298,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Transcript management
   loadTranscript: async (projectId) => {
     try {
+      logger.info('Loading transcript', { projectId });
       const segments = await TranscriptSegmentService.getByProjectId(projectId);
       set({ transcript: segments });
+      logger.debug('Transcript loaded successfully', { count: segments.length });
     } catch (error) {
       logger.error('Failed to load transcript', error as Error, { projectId });
     }
@@ -280,6 +309,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   saveTranscript: async (projectId, segments) => {
     try {
+      logger.info('Saving transcript', { projectId, segmentCount: segments.length });
       // Delete existing segments
       await TranscriptSegmentService.deleteByProjectId(projectId);
       
@@ -291,6 +321,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       
       const createdSegments = await TranscriptSegmentService.createBatch(segmentsWithProjectId);
       set({ transcript: createdSegments });
+      logger.debug('Transcript saved successfully');
     } catch (error) {
       logger.error('Failed to save transcript', error as Error, { projectId });
       throw error;

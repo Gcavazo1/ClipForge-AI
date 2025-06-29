@@ -152,6 +152,7 @@ export async function createUserProfileManually(user: any, name: string) {
     let lastError = null;
     
     while (retries > 0) {
+      logger.info(`Attempting to create user profile (attempts left: ${retries})`, { userId: user.id });
       const { error } = await supabase
         .from('user_profiles')
         .insert({
@@ -184,10 +185,10 @@ export async function createUserProfileManually(user: any, name: string) {
       }
       
       lastError = error;
+      logger.warn(`Profile creation failed, retrying (${retries} attempts left)`, error);
       retries--;
       
       if (retries > 0) {
-        logger.warn(`Profile creation failed, retrying (${retries} attempts left)`, error);
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
@@ -393,6 +394,7 @@ export async function refreshSession() {
 // User profile management
 async function ensureUserProfile(user: any) {
   try {
+    logger.info('Ensuring user profile exists', { userId: user.id });
     const { data: profile, error } = await supabase
       .from('user_profiles')
       .select('id')
@@ -409,6 +411,8 @@ async function ensureUserProfile(user: any) {
     } else if (error) {
       logger.error('Failed to check user profile', error);
       throw error;
+    } else {
+      logger.info('User profile exists', { userId: user.id });
     }
   } catch (error) {
     logger.error('Ensure user profile error', error as Error);
@@ -424,6 +428,7 @@ export function onAuthStateChange(callback: (event: string, session: any) => voi
 // Get current user with profile
 export async function getCurrentUser() {
   try {
+    logger.debug('Getting current user');
     const { data: { user }, error } = await supabase.auth.getUser();
     
     if (error) {
@@ -432,10 +437,12 @@ export async function getCurrentUser() {
     }
 
     if (!user) {
+      logger.debug('No current user found');
       return null;
     }
 
     // Get user profile
+    logger.debug('Getting user profile', { userId: user.id });
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
       .select('*')
@@ -445,6 +452,11 @@ export async function getCurrentUser() {
     if (profileError && profileError.code !== 'PGRST116') {
       logger.error('Failed to get user profile', profileError);
     }
+
+    logger.debug('Current user retrieved', { 
+      userId: user.id, 
+      hasProfile: !!profile 
+    });
 
     return {
       ...user,
