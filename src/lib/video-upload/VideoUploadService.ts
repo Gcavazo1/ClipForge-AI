@@ -226,14 +226,25 @@ export class VideoUploadService {
    */
   private async processUploadTask(task: UploadTask): Promise<void> {
     try {
-      // Ensure we have a valid content type
+      // Get file extension and ensure we have a valid content type
       const fileExt = getFileExtension(task.file.name);
-      const contentType = task.file.type || getMimeTypeFromExtension(fileExt);
+      const originalContentType = task.file.type;
+      
+      // Use a known video MIME type based on extension if we don't have a valid one
+      const contentType = (originalContentType && originalContentType !== 'application/octet-stream') 
+        ? originalContentType 
+        : fileExt === 'mp4' ? 'video/mp4'
+        : fileExt === 'mov' ? 'video/quicktime'
+        : fileExt === 'webm' ? 'video/webm'
+        : fileExt === 'avi' ? 'video/x-msvideo'
+        : fileExt === 'mkv' ? 'video/x-matroska'
+        : 'video/mp4'; // Default to mp4 if we can't determine
       
       logger.info('Processing upload task', { 
         taskId: task.id, 
         fileName: task.file.name,
-        mimeType: contentType
+        originalContentType,
+        contentType
       });
       
       // Update task status

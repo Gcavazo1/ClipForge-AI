@@ -32,6 +32,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [currentCaption, setCurrentCaption] = useState<TranscriptSegment | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadTimeout, setLoadTimeout] = useState<number | null>(null);
   
   // Check if src is valid
   useEffect(() => {
@@ -41,8 +42,28 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     } else {
       setError(null);
       setIsLoading(true);
+      
+      // Set a timeout to handle videos that never load
+      if (loadTimeout) {
+        window.clearTimeout(loadTimeout);
+      }
+      
+      const timeout = window.setTimeout(() => {
+        if (isLoading) {
+          setError('Video is taking too long to load. It may be unavailable or too large.');
+          setIsLoading(false);
+        }
+      }, 30000); // 30 second timeout
+      
+      setLoadTimeout(timeout);
     }
-  }, [src]);
+    
+    return () => {
+      if (loadTimeout) {
+        window.clearTimeout(loadTimeout);
+      }
+    };
+  }, [src, isLoading, loadTimeout]);
   
   // Sync playback state with props
   useEffect(() => {
@@ -83,6 +104,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (videoRef.current) {
       setDuration(videoRef.current.duration);
       setIsLoading(false);
+      
+      // Clear timeout
+      if (loadTimeout) {
+        window.clearTimeout(loadTimeout);
+        setLoadTimeout(null);
+      }
     }
   };
   
@@ -169,6 +196,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     setIsLoading(false);
     setError('Failed to load video. Please check the URL and try again.');
     logger.error('Video loading error', { src });
+    
+    // Clear timeout
+    if (loadTimeout) {
+      window.clearTimeout(loadTimeout);
+      setLoadTimeout(null);
+    }
   };
   
   return (

@@ -170,8 +170,18 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
             // Refresh recent uploads
             setRecentUploads(uploadCache.getAllUploads().slice(0, 5));
             
-            // Call completion callback
-            onUploadComplete(task.result);
+            // Call completion callback with the result
+            if (task.result && task.result.id) {
+              onUploadComplete(task.result);
+            } else {
+              logger.error('Upload task completed but result is invalid', { taskId: task.id });
+              setToastMessage({
+                title: 'Upload Error',
+                description: 'The upload completed but the result is invalid. Please try again.',
+                variant: 'error'
+              });
+              setShowToast(true);
+            }
             
             // Show success toast
             setToastMessage({
@@ -499,9 +509,18 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
               variant="outline"
               size="sm"
               onClick={handlePauseResumeUpload}
-              icon={isPaused ? <Play size={16} /> : <Pause size={16} />}
             >
-              {isPaused ? 'Resume' : 'Pause'}
+              {isPaused ? (
+                <>
+                  <Play size={16} className="mr-2" />
+                  Resume
+                </>
+              ) : (
+                <>
+                  <Pause size={16} className="mr-2" />
+                  Pause
+                </>
+              )}
             </Button>
           )}
           
@@ -509,8 +528,8 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
             variant="outline"
             size="sm"
             onClick={handleCancelUpload}
-            icon={<X size={16} />}
           >
+            <X size={16} className="mr-2" />
             Cancel
           </Button>
         </div>
@@ -605,9 +624,9 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
         <Button 
           variant="outline" 
           size="sm" 
-          icon={<Upload size={16} />}
           disabled={!initialized || loading}
         >
+          <Upload size={16} className="mr-2" />
           Select Video
         </Button>
         <p className="text-xs text-foreground-muted mt-4">
