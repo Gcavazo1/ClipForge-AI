@@ -119,9 +119,13 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
     checkServiceStatus();
     
     // Load recent uploads from cache
-    const cachedUploads = uploadCache.getAllUploads();
-    if (cachedUploads.length > 0) {
-      setRecentUploads(cachedUploads.slice(0, 5));
+    try {
+      const cachedUploads = uploadCache.getAllUploads();
+      if (cachedUploads.length > 0) {
+        setRecentUploads(cachedUploads.slice(0, 5));
+      }
+    } catch (cacheError) {
+      logger.error('Failed to load recent uploads from cache', cacheError as Error);
     }
     
     return () => {
@@ -158,17 +162,26 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
             setUploadState(false);
             
             // Cache the upload
-            uploadCache.addUpload(
-              task.result.id,
-              task.file.name,
-              task.file.size,
-              task.file.type,
-              task.result.videoUrl,
-              task.result.thumbnailUrl
-            );
-            
-            // Refresh recent uploads
-            setRecentUploads(uploadCache.getAllUploads().slice(0, 5));
+            try {
+              uploadCache.addUpload(
+                task.result.id,
+                task.file.name,
+                task.file.size,
+                task.file.type,
+                task.result.videoUrl,
+                task.result.thumbnailUrl
+              );
+              
+              logger.debug('Added upload to cache', { 
+                fileName: task.file.name, 
+                fileSize: task.file.size 
+              });
+              
+              // Refresh recent uploads
+              setRecentUploads(uploadCache.getAllUploads().slice(0, 5));
+            } catch (cacheError) {
+              logger.error('Failed to cache upload', cacheError as Error);
+            }
             
             // Call completion callback with the result
             if (task.result && task.result.id) {
@@ -623,7 +636,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onUploadComplete }) => {
         </p>
         <Button 
           variant="outline" 
-          size="sm" 
+          size="sm"
           disabled={!initialized || loading}
         >
           <Upload size={16} className="mr-2" />
