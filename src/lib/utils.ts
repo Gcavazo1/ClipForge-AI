@@ -9,7 +9,7 @@ export function cn(...inputs: ClassValue[]) {
 
 // Format date using Intl API
 export function formatDate(timestamp: number): string {
-  if (isNaN(timestamp)) {
+  if (isNaN(timestamp) || timestamp <= 0) {
     return 'Unknown date';
   }
   
@@ -205,5 +205,23 @@ export function isValidUrl(url: string): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+// Ensure a date string is valid
+export function ensureValidDate(dateStr: string | undefined | null): string {
+  if (!dateStr) {
+    return new Date().toISOString();
+  }
+  
+  try {
+    // Check if the date is valid
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+      return new Date().toISOString();
+    }
+    return dateStr;
+  } catch (e) {
+    return new Date().toISOString();
   }
 }

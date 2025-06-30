@@ -56,8 +56,12 @@ const EditorPage: React.FC = () => {
       setError(null);
       
       try {
+        // Validate projectId
         if (!projectId) {
-          throw new Error('No project ID provided');
+          logger.warn('No project ID provided in URL');
+          setError('No project ID provided');
+          setIsLoading(false);
+          return;
         }
         
         logger.info('Loading project data', { projectId });
@@ -84,24 +88,22 @@ const EditorPage: React.FC = () => {
         
         // If not in store, try to load from database
         try {
-          if (projectId) {
-            const dbProject = await VideoProjectService.getById(projectId);
-            if (dbProject) {
-              logger.info('Project loaded from database', { projectId });
-              setCurrentProject(dbProject);
-              
-              // Load transcript and clips if needed
-              if (transcript.length === 0) {
-                setTranscript(mockTranscript);
-              }
-              
-              if (clipSegments.length === 0) {
-                setClipSegments(mockClipSegments);
-              }
-              
-              setIsLoading(false);
-              return;
+          const dbProject = await VideoProjectService.getById(projectId);
+          if (dbProject) {
+            logger.info('Project loaded from database', { projectId });
+            setCurrentProject(dbProject);
+            
+            // Load transcript and clips if needed
+            if (transcript.length === 0) {
+              setTranscript(mockTranscript);
             }
+            
+            if (clipSegments.length === 0) {
+              setClipSegments(mockClipSegments);
+            }
+            
+            setIsLoading(false);
+            return;
           }
         } catch (dbError) {
           logger.warn('Failed to load project from database', dbError as Error);
@@ -303,10 +305,11 @@ const EditorPage: React.FC = () => {
           <Button
             variant="ghost"
             size="icon"
-            icon={<ArrowLeft size={18} />}
             onClick={() => navigate('/dashboard')}
             className="mr-2"
-          />
+          >
+            <ArrowLeft size={18} />
+          </Button>
           <div>
             <h1 className="text-2xl font-bold">{currentProject.title}</h1>
             <p className="text-foreground-muted">Editor</p>
@@ -316,18 +319,18 @@ const EditorPage: React.FC = () => {
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            icon={<Settings size={16} />}
             onClick={() => setShowSettings(!showSettings)}
           >
+            <Settings size={16} className="mr-2" />
             {showSettings ? 'Hide Settings' : 'Settings'}
           </Button>
           
           <Button
             variant="primary"
-            icon={<Download size={16} />}
             onClick={handleExport}
             disabled={isExporting || !selectedClip}
           >
+            <Download size={16} className="mr-2" />
             {isExporting ? 'Exporting...' : 'Export Clip'}
           </Button>
         </div>

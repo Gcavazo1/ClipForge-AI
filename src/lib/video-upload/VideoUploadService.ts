@@ -227,7 +227,8 @@ export class VideoUploadService {
   private async processUploadTask(task: UploadTask): Promise<void> {
     try {
       // Ensure we have a valid content type
-      const contentType = task.file.type || getMimeTypeFromExtension(getFileExtension(task.file.name));
+      const fileExt = getFileExtension(task.file.name);
+      const contentType = task.file.type || getMimeTypeFromExtension(fileExt);
       
       logger.info('Processing upload task', { 
         taskId: task.id, 

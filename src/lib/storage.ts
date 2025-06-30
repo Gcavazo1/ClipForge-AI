@@ -33,11 +33,28 @@ export class StorageService {
       // Ensure we have a valid content type
       const contentType = file.type || getMimeTypeFromExtension(fileExt);
       
-      logger.info('Using content type for upload', { contentType, fileName });
+      if (!contentType || contentType === 'application/octet-stream') {
+        logger.warn('Invalid or missing content type, using video/mp4 as fallback', {
+          originalType: file.type,
+          fileName: file.name
+        });
+      }
+      
+      // Use a known video MIME type based on extension if we don't have a valid one
+      const finalContentType = (contentType && contentType !== 'application/octet-stream') 
+        ? contentType 
+        : fileExt === 'mp4' ? 'video/mp4'
+        : fileExt === 'mov' ? 'video/quicktime'
+        : fileExt === 'webm' ? 'video/webm'
+        : fileExt === 'avi' ? 'video/x-msvideo'
+        : fileExt === 'mkv' ? 'video/x-matroska'
+        : 'video/mp4'; // Default to mp4 if we can't determine
+      
+      logger.info('Using content type for upload', { contentType: finalContentType, fileName });
 
       // Create a new File with explicit content type
       const fileWithContentType = new File([file], fileName, {
-        type: contentType
+        type: finalContentType
       });
 
       const { data, error } = await supabase.storage
@@ -45,7 +62,7 @@ export class StorageService {
         .upload(fileName, fileWithContentType, {
           cacheControl: '3600',
           upsert: false,
-          contentType, // Explicitly set content type
+          contentType: finalContentType, // Explicitly set content type
           onUploadProgress: (progress) => {
             const percentage = (progress.loaded / progress.total) * 100;
             onProgress?.(percentage);
@@ -64,7 +81,7 @@ export class StorageService {
         id: data.path,
         url: publicUrl,
         size: file.size,
-        type: contentType
+        type: finalContentType
       };
     } catch (error) {
       logger.error('Video upload failed', error as Error, { userId, fileName: file.name });
@@ -127,7 +144,7 @@ export class StorageService {
         type: contentType
       });
 
-      const { data, error } = await supabase.storage
+      const { data, error } = await supabase
         .from('exports')
         .upload(fileName, fileWithContentType, {
           cacheControl: '3600',

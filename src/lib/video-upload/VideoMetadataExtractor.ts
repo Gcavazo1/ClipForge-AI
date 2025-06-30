@@ -78,6 +78,12 @@ export class VideoMetadataExtractor {
           // Start loading the video
           video.preload = 'metadata';
           video.src = url;
+          
+          // Set a timeout in case the video never loads
+          setTimeout(() => {
+            URL.revokeObjectURL(url);
+            reject(new Error('Timed out while loading video metadata'));
+          }, 10000); // 10 second timeout
         });
       },
       { fileName: file.name, size: file.size }
@@ -214,6 +220,12 @@ export class VideoMetadataExtractor {
           // Start loading the video
           video.src = url;
           video.load();
+          
+          // Set a timeout in case the video never loads
+          setTimeout(() => {
+            URL.revokeObjectURL(url);
+            reject(new Error('Timed out while extracting video frame'));
+          }, 10000); // 10 second timeout
         });
       },
       { fileName: file.name, timestamp }

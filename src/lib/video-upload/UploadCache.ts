@@ -97,6 +97,9 @@ export class UploadCache {
    * Get all uploads in the cache
    */
   public getAllUploads(): CachedUpload[] {
+    // First clean up expired uploads
+    this.cleanup();
+    
     return Array.from(this.cache.values())
       .filter(upload => upload.expiresAt >= Date.now())
       .sort((a, b) => b.uploadedAt - a.uploadedAt);
@@ -150,15 +153,21 @@ export class UploadCache {
     try {
       const data = localStorage.getItem(this.STORAGE_KEY);
       if (data) {
-        const entries = JSON.parse(data) as [string, CachedUpload][];
-        this.cache = new Map(entries);
-        
-        // Clean up expired entries
-        this.cleanup();
-        
-        logger.debug('Loaded upload cache from storage', { 
-          entries: this.cache.size 
-        });
+        try {
+          const entries = JSON.parse(data) as [string, CachedUpload][];
+          this.cache = new Map(entries);
+          
+          // Clean up expired entries
+          this.cleanup();
+          
+          logger.debug('Loaded upload cache from storage', { 
+            entries: this.cache.size 
+          });
+        } catch (parseError) {
+          logger.error('Failed to parse upload cache data', parseError as Error);
+          this.cache = new Map();
+          localStorage.removeItem(this.STORAGE_KEY);
+        }
       }
     } catch (error) {
       logger.error('Failed to load upload cache from storage', error as Error);

@@ -160,6 +160,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     logger.error('Video loading error', { src });
   };
   
+  // Check if src is valid
+  useEffect(() => {
+    if (!src) {
+      setError('No video source provided');
+      setIsLoading(false);
+    } else {
+      setError(null);
+      setIsLoading(true);
+    }
+  }, [src]);
+  
   return (
     <div className="relative bg-black rounded-lg overflow-hidden group">
       {isLoading && (
@@ -177,16 +188,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         </div>
       )}
       
-      <video
-        ref={videoRef}
-        src={src}
-        className="w-full h-auto max-h-[70vh] object-contain"
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={handleMetadataLoaded}
-        onEnded={() => onPlayPause(false)}
-        onError={handleVideoError}
-        playsInline
-      />
+      {src && (
+        <video
+          ref={videoRef}
+          src={src}
+          className="w-full h-auto max-h-[70vh] object-contain"
+          onTimeUpdate={handleTimeUpdate}
+          onLoadedMetadata={handleMetadataLoaded}
+          onEnded={() => onPlayPause(false)}
+          onError={handleVideoError}
+          playsInline
+        />
+      )}
       
       {/* Caption overlay */}
       {currentCaption && showCaptions && (

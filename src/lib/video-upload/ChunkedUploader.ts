@@ -326,7 +326,7 @@ export class ChunkedUploader {
       };
 
       // Start initial concurrent uploads
-      for (let i = 0; i < this.config.concurrentUploads; i++) {
+      for (let i = 0; i < this.config.concurrentUploads && i < totalChunks; i++) {
         uploadNextChunk();
       }
     });
@@ -377,6 +377,10 @@ export class ChunkedUploader {
         baseDelay: this.config.retryDelay,
         retryCondition: (error) => {
           // Retry on network errors, timeouts, and 5xx status codes
+          // But don't retry on 400 Bad Request with MIME type errors
+          if (error.message && error.message.includes('mime type') && error.message.includes('not supported')) {
+            return false;
+          }
           return error.message.includes('network') || 
                  error.message.includes('timeout') || 
                  error.message.includes('500') ||

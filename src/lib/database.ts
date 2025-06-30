@@ -51,7 +51,7 @@ export class VideoProjectService {
   static async getById(id: string): Promise<VideoProject | null> {
     // Validate ID to prevent invalid UUID errors
     if (!id || id === 'undefined' || id === 'null') {
-      logger.error('Invalid project ID provided', { id });
+      logger.warn('Invalid project ID provided', { id });
       return null;
     }
 

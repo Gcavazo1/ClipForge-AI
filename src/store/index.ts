@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { VideoProject, ClipSegment, TranscriptSegment, ExportOptions, User } from '../types';
 import { VideoProjectService, ClipSegmentService, TranscriptSegmentService, UserProfileService } from '../lib/database';
-import { logger } from '../logger';
+import { logger } from '../lib/logger';
+import { ensureValidDate } from '../lib/utils';
 
 interface AppState {
   // User state
@@ -197,8 +198,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Ensure project has valid dates
     const validatedProject = {
       ...project,
-      createdAt: project.createdAt || new Date().toISOString(),
-      updatedAt: project.updatedAt || new Date().toISOString()
+      createdAt: ensureValidDate(project.createdAt),
+      updatedAt: ensureValidDate(project.updatedAt)
     };
     
     set((state) => ({ 
@@ -246,8 +247,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Ensure all projects have valid dates
       const validatedProjects = projects.map(project => ({
         ...project,
-        createdAt: project.createdAt || new Date().toISOString(),
-        updatedAt: project.updatedAt || new Date().toISOString()
+        createdAt: ensureValidDate(project.createdAt),
+        updatedAt: ensureValidDate(project.updatedAt)
       }));
       
       set({ projects: validatedProjects });
