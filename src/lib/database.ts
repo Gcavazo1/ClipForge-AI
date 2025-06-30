@@ -58,22 +58,28 @@ export class VideoProjectService {
     return OptimizedDatabaseService.cachedQuery(
       `video-project-${id}`,
       async () => {
-        const { data, error } = await supabase
-          .from('video_projects')
-          .select('*')
-          .eq('id', id)
-          .is('deleted_at', null)
-          .single();
+        try {
+          const { data, error } = await supabase
+            .from('video_projects')
+            .select('*')
+            .eq('id', id)
+            .is('deleted_at', null)
+            .single();
 
-        if (error) {
-          if (error.code === 'PGRST116') {
-            logger.warn('Project not found', { id });
-            return null; // Not found
+          if (error) {
+            if (error.code === 'PGRST116') {
+              logger.warn('Project not found', { id });
+              return null; // Not found
+            }
+            throw error;
           }
-          throw error;
-        }
 
-        return this.mapFromDatabase(data);
+          return this.mapFromDatabase(data);
+        } catch (error) {
+          // Log but don't throw to prevent infinite retries
+          logger.warn('Error fetching project by ID', { id, error: (error as Error).message });
+          return null;
+        }
       },
       { ttl: 2 * 60 * 1000 } // 2 minutes cache
     );

@@ -48,18 +48,22 @@ const EditorPage: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadAttempted, setLoadAttempted] = useState(false);
   
   // Load project data
   useEffect(() => {
+    // Prevent infinite loop by tracking if we've already attempted to load
+    if (loadAttempted) return;
+    
     const loadProject = async () => {
       setIsLoading(true);
       setError(null);
       
       try {
         // Validate projectId
-        if (!projectId) {
-          logger.warn('No project ID provided in URL');
-          setError('No project ID provided');
+        if (!projectId || projectId === 'undefined' || projectId === 'null') {
+          logger.warn('No valid project ID provided in URL');
+          setError('No valid project ID provided');
           setIsLoading(false);
           return;
         }
@@ -140,6 +144,8 @@ const EditorPage: React.FC = () => {
         logger.error('Error loading project', error as Error);
         setError(error instanceof Error ? error.message : 'Failed to load project');
         setIsLoading(false);
+      } finally {
+        setLoadAttempted(true);
       }
     };
     
@@ -149,7 +155,7 @@ const EditorPage: React.FC = () => {
       // Clean up
       setCurrentProject(null);
     };
-  }, [projectId, projects, navigate, setCurrentProject, setTranscript, setClipSegments, loadProjects, transcript.length, clipSegments.length]);
+  }, [projectId, projects, navigate, setCurrentProject, setTranscript, setClipSegments, loadProjects, transcript.length, clipSegments.length, loadAttempted]);
   
   const selectedClip = clipSegments.find((clip) => clip.id === selectedClipId);
   

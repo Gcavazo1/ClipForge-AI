@@ -33,6 +33,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // Check if src is valid
+  useEffect(() => {
+    if (!src) {
+      setError('No video source provided');
+      setIsLoading(false);
+    } else {
+      setError(null);
+      setIsLoading(true);
+    }
+  }, [src]);
+  
   // Sync playback state with props
   useEffect(() => {
     if (videoRef.current) {
@@ -159,17 +170,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     setError('Failed to load video. Please check the URL and try again.');
     logger.error('Video loading error', { src });
   };
-  
-  // Check if src is valid
-  useEffect(() => {
-    if (!src) {
-      setError('No video source provided');
-      setIsLoading(false);
-    } else {
-      setError(null);
-      setIsLoading(true);
-    }
-  }, [src]);
   
   return (
     <div className="relative bg-black rounded-lg overflow-hidden group">

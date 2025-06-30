@@ -88,7 +88,17 @@ export class ChunkedUploader {
       const totalChunks = Math.ceil(this.file.size / this.config.chunkSize);
       
       // Ensure we have a valid content type
-      const contentType = this.file.type || getMimeTypeFromExtension(fileExt);
+      const originalContentType = this.file.type;
+      
+      // Use a known video MIME type based on extension if we don't have a valid one
+      const contentType = (originalContentType && originalContentType !== 'application/octet-stream') 
+        ? originalContentType 
+        : fileExt === 'mp4' ? 'video/mp4'
+        : fileExt === 'mov' ? 'video/quicktime'
+        : fileExt === 'webm' ? 'video/webm'
+        : fileExt === 'avi' ? 'video/x-msvideo'
+        : fileExt === 'mkv' ? 'video/x-matroska'
+        : 'video/mp4'; // Default to mp4 if we can't determine
       
       logger.info('Starting chunked upload', { 
         fileName, 
@@ -96,6 +106,7 @@ export class ChunkedUploader {
         totalChunks,
         chunkSize: this.config.chunkSize,
         concurrentUploads: this.config.concurrentUploads,
+        originalContentType,
         contentType
       });
 

@@ -36,7 +36,7 @@ export class VideoUploadService {
   private static instance: VideoUploadService;
   private uploadTasks: Map<string, UploadTask> = new Map();
   private uploadQueue: string[] = [];
-  private maxConcurrentUploads: number = 3;
+  private maxConcurrentUploads: number = 2; // Limit concurrent uploads to prevent overwhelming the system
   private activeUploads: number = 0;
   private processingQueue: boolean = false;
 
