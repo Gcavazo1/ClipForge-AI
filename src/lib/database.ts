@@ -192,6 +192,11 @@ export class VideoProjectService {
   }
 
   private static mapFromDatabase(data: any): VideoProject {
+    // Validate that we have a valid ID from the database
+    if (!data.id || typeof data.id !== 'string') {
+      throw new Error(`Invalid video project ID received from database: ${data.id}`);
+    }
+
     return {
       id: data.id,
       title: data.title,
